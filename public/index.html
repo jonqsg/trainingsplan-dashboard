@@ -587,7 +587,17 @@ function renderWizardModal(){
     <div class="row" style="gap:8px; margin-top:8px;">
       <button class="btn-outline" style="flex:1" onclick="wizardGenerate(false)">Regelbasiert generieren</button>
       <button class="btn" style="flex:1" onclick="wizardGenerate(true)">Mit Claude generieren</button>
-    </div>`;
+    </div>
+    <button class="btn-outline" style="width:100%; margin-top:8px;" onclick="wizardPasteMode()">Plan aus dem Chat einfügen</button>`;
+  if(state.wizardStep===2.5){
+    return `<div class="row between" style="margin-bottom:10px;"><h3>Plan aus dem Chat einfügen</h3><button class="close" onclick="closeModal()">×</button></div>
+      <p class="sub" style="margin-top:0">Frag Claude im Chat nach deinem Wochenplan (Fitnesswerte + verfügbare Stunden pro Tag mitgeben) und füge die JSON-Antwort hier ein.</p>
+      <textarea id="w-paste" style="width:100%; min-height:160px; font-family:var(--mono); font-size:12px; padding:8px; border:1px solid var(--line);" placeholder='[{"dateKey":"2026-09-28","discipline":"rad","title":"...","duration":90,"zone":"z2","goal":"..."}]'></textarea>
+      <div class="row" style="gap:8px; margin-top:8px;">
+        <button class="btn-outline" style="flex:1" onclick="wizardBack()">Zurück</button>
+        <button class="btn" style="flex:2" onclick="wizardApplyPaste()">Übernehmen</button>
+      </div>`;
+  }
   if(state.wizardStep===3 && state.wizardLoading){
     return `<div class="row between" style="margin-bottom:10px;"><h3>Plan automatisch erstellen</h3><button class="close" onclick="closeModal()">×</button></div>
       <p class="sub">Claude erstellt den Plan …</p>`;
@@ -599,7 +609,7 @@ function renderWizardModal(){
   }
   if(state.wizardStep===3 && state.wizardResult){
     const r = state.wizardResult;
-    return `<div class="row between" style="margin-bottom:10px;"><h3>Plan automatisch erstellen ${state.wizardSource==="claude"?"· von Claude":"· regelbasiert"}</h3><button class="close" onclick="closeModal()">×</button></div>
+    return `<div class="row between" style="margin-bottom:10px;"><h3>Plan automatisch erstellen ${state.wizardSource==="claude"?"· von Claude":state.wizardSource==="claude-chat"?"· von Claude (Chat)":"· regelbasiert"}</h3><button class="close" onclick="closeModal()">×</button></div>
       ${r.warning ? `<div class="warn-box">${r.warning}</div>` : (r.workouts.length ? `<div class="good-txt">Wochenlast ${r.totalLoad} liegt innerhalb eines verträglichen Aufbau-Tempos (≈${r.safeLoad}).</div>` : "")}
       ${r.workouts.map(w=>{ const disc=DISCIPLINES[w.discipline];
         return `<div class="wizard-item"><div class="top"><span class="dot" style="background:${disc.color}"></span><b>${w.title}</b>
@@ -679,6 +689,21 @@ function enrichClaudeWorkouts(raw){
   return { workouts, warning, totalLoad, safeLoad:Math.round(safeLoad) };
 }
 
+function wizardPasteMode(){ state.wizardStep = 2.5; render(); }
+function wizardApplyPaste(){
+  const el = document.getElementById("w-paste");
+  try{
+    const raw = JSON.parse(el.value);
+    if(!Array.isArray(raw)) throw new Error("Erwarte ein JSON-Array.");
+    state.wizardSource = "claude-chat";
+    state.wizardResult = enrichClaudeWorkouts(raw);
+    state.wizardError = null;
+    state.wizardStep = 3;
+    render();
+  } catch(e){
+    alert("Konnte das JSON nicht lesen: " + e.message);
+  }
+}
 function wizardApply(){ applyAutoPlan(state.wizardResult.workouts); closeModal(); }
 
 function renderDetailModal(m){

@@ -5,5 +5,15 @@
 [functions]
   node_bundler = "esbuild"
 
+# Tägliche Trainings-Erinnerung per Push: 05:00 UTC = 07:00 MESZ / 06:00 MEZ
+[functions."daily-reminder"]
+  schedule = "0 5 * * *"
+
+# Service Worker nie aus dem HTTP-Cache ausliefern, damit Updates sofort greifen
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+
 # Alle /.netlify/functions/* Routen sind automatisch verfügbar — kein
 # zusätzliches Redirect-Setup nötig.

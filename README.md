@@ -3,24 +3,41 @@
 Statisches Dashboard (Fitness-Übersicht, Wochenplaner, Auto-Plan-Wizard, ERG-/GPX-Generierung)
 mit Netlify Functions als Backend, Netlify Blobs als Speicher und optionaler intervals.icu-Anbindung.
 
+## Funktionen
+
+- **Heute**: Form-Anzeige (TSB), Tagesform-Score aus HRV, Ruhepuls, Schlaf und Check-in, Einheit des Tages mit Wetter-Hinweis
+- **Plan**: Wochenplaner mit Workout-Bibliothek (Drag & Drop), Abgleich geplant vs. absolviert, Erfüllungsquote, Wochenrückblick von Claude
+- **Auto-Plan**: regelbasiert oder mit Claude — berücksichtigt Saisonphase, Tagesform, RPE-Feedback und die 16-Tage-Wettervorhersage
+- **Fortschritt**: Fitness/Ermüdung/Form mit Prognose, Saisonplanung mit Form-Prognose für den Renntag, Leistungskurve, FTP-Verlauf
+- **intervals.icu**: Workouts als strukturierte Workouts senden (→ Garmin/Wahoo/Zwift), optional automatisch
+- **Offline-fähige PWA** mit täglicher Push-Erinnerung
+
 ## Architektur
 
 ```
 public/index.html          → das Dashboard selbst (Vanilla JS, kein Build-Schritt)
+public/sw.js               → Service Worker: Offline-Cache + Push-Benachrichtigungen
+public/manifest.webmanifest→ PWA-Manifest (Home-Bildschirm)
 netlify/functions/
   plan.js                  → GET/POST Wochenplan (Netlify Blobs)
-  settings.js              → GET/POST FTP/HFmax (Netlify Blobs)
-  intervals-fitness.js     → Proxy: CTL/ATL/TSB von intervals.icu
-  intervals-activities.js  → Proxy: letzte Aktivitäten von intervals.icu
-  intervals-push-event.js  → Proxy: geplantes Workout als Kalender-Event anlegen
+  settings.js              → GET/POST Einstellungen: FTP, HFmax, Saisonziel, Standort …
+  store.js                 → GET/POST ?key=library|journal (Vorlagen, Check-ins, Rückblicke)
+  intervals-fitness.js     → Proxy: CTL/ATL/TSB + Wellness (HRV, Ruhepuls, Schlaf) von intervals.icu
+  intervals-activities.js  → Proxy: Aktivitäten inkl. Leistung und eFTP
+  intervals-power-curve.js → Proxy: Leistungskurve (Bestwerte je Dauer)
+  intervals-push-event.js  → Workout als (strukturiertes) Kalender-Event anlegen/aktualisieren/löschen
   generate-plan.js         → lässt Claude einen Wochenplan vorschlagen (Trainingswissenschaft)
+  weekly-review.js         → Wochenrückblick von Claude
+  push-subscribe.js        → Push-Abos verwalten (+ Testnachricht)
+  daily-reminder.js        → geplante Function: morgendliche Push-Erinnerung (Zeitplan in netlify.toml)
   lib/blobStore.js         → gemeinsamer Blob-Store-Zugriff
   lib/intervalsClient.js   → gemeinsamer intervals.icu-API-Client (hält den Key geheim)
+  lib/claude.js            → gemeinsamer Claude-API-Aufruf
+  lib/push.js              → Web-Push-Versand (VAPID)
 ```
 
-Jede Function ist bewusst klein und eigenständig — neue Funktionen (z.B. Wetter-API,
-Strava-Anbindung, mehrere Athleten) lassen sich als weitere Datei in `netlify/functions/`
-ergänzen, ohne bestehende Dateien anzufassen.
+Wetter kommt direkt im Browser von [Open-Meteo](https://open-meteo.com) (kostenlos, kein API-Key).
+Der Standort lässt sich in den Einstellungen ändern (Standard: München).
 
 ## Setup
 
@@ -52,7 +69,20 @@ Im Netlify-Dashboard: Site settings → Environment variables → "Add a variabl
 |---|---|
 | `INTERVALS_API_KEY` | dein API-Key von intervals.icu |
 | `INTERVALS_ATHLETE_ID` | deine Athlete-ID (z.B. `i123456`, steht in der intervals.icu-URL) |
-| `ANTHROPIC_API_KEY` | dein API-Key von der Anthropic Console (console.anthropic.com → API Keys), nur nötig für "Mit Claude generieren" im Wizard |
+| `ANTHROPIC_API_KEY` | dein API-Key von der Anthropic Console (console.anthropic.com → API Keys), nur nötig für "Mit Claude" im Wizard und den Wochenrückblick |
+| `VAPID_PUBLIC_KEY` | nur für die tägliche Push-Erinnerung (siehe unten) |
+| `VAPID_PRIVATE_KEY` | nur für die tägliche Push-Erinnerung |
+| `VAPID_SUBJECT` | optional, z.B. `mailto:du@example.com` |
+
+**VAPID-Schlüssel erzeugen** (einmalig, lokal mit Node.js):
+
+```bash
+npx web-push generate-vapid-keys
+```
+
+Die beiden ausgegebenen Werte als `VAPID_PUBLIC_KEY` und `VAPID_PRIVATE_KEY` eintragen. Die
+Erinnerung kommt täglich um 05:00 UTC (= 07:00 Sommerzeit / 06:00 Winterzeit) und nur, wenn für
+den Tag etwas geplant ist. Uhrzeit ändern: `schedule` in `netlify.toml`.
 
 Nach dem Setzen einmal neu deployen (`netlify deploy --prod`), damit die Functions die
 Variablen sehen.
@@ -64,9 +94,12 @@ Einrichtung nötig.
 
 ### 5. Auf dem iPhone installieren
 
-Wie gehabt: die fertige URL (z.B. `https://dein-projekt.netlify.app`) in Safari öffnen →
-Teilen-Symbol → "Zum Home-Bildschirm". Jetzt zeigen alle Geräte denselben Datenstand, weil
-er zentral über die Functions/Blobs läuft statt lokal im Browser.
+Die fertige URL (z.B. `https://dein-projekt.netlify.app`) in Safari öffnen →
+Teilen-Symbol → "Zum Home-Bildschirm". Alle Geräte zeigen denselben Datenstand, weil er zentral
+über die Functions/Blobs läuft. Zusätzlich hält die App eine lokale Kopie: Ohne Netz lässt sie
+sich weiter öffnen und bearbeiten, Änderungen werden nachgereicht, sobald der Server wieder
+erreichbar ist. Push-Erinnerungen funktionieren auf dem iPhone (ab iOS 16.4) nur in der vom
+Home-Bildschirm geöffneten App — dort in den Einstellungen "Tägliche Erinnerung" einschalten.
 
 ## Kosten-Hinweis
 
@@ -85,9 +118,8 @@ der Rest des Stacks. Aktuelle Preise: https://claude.com/pricing
   Passwort-Query-Parameter oder Netlify Identity für echte Logins).
   Andere Berechnung
   im Wizard (`generateAutoPlan`) lässt sich unabhängig anpassen.
-- **Automatisch pushen statt manuell**: `intervals-push-event.js` wird aktuell nur per Klick
-  aufgerufen — ließe sich auch an `persistPlan()` anhängen, um jedes neue Workout automatisch
-  zu spiegeln.
+- **Automatisch pushen**: in den Einstellungen "Automatisch an intervals.icu senden" einschalten —
+  neue und verschobene Workouts landen dann ohne Klick im intervals.icu-Kalender.
 
 ## Hinweis zur intervals.icu-Authentifizierung
 

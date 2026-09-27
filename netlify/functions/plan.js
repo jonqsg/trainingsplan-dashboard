@@ -5,7 +5,7 @@ const { planStore } = require("./lib/blobStore");
 const KEY = "plan.json";
 
 exports.handler = async (event) => {
-  const store = planStore();
+  const store = planStore(event);
 
   if (event.httpMethod === "GET") {
     const data = await store.get(KEY, { type: "json" });

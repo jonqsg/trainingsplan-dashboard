@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Training">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#EEEDE7">
+<title>Trainingsstand</title>
+<style>
+  :root {
+    --paper:#EEEDE7; --panel:#F7F6F1; --ink:#1B1D19; --sub:#6B6E64; --line:#D7D5C9;
+    --accent:#2C5F63; --accent2:#C24A1F; --z1:#9AA6A0; --z2:#2C5F63; --z3:#C99A3B;
+    --sst:#C2751F; --thr:#C24A1F; --vo2:#A32B1E; --ana:#6E1610; --good:#2C5F63; --warn:#C24A1F;
+    --sans: -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; padding:0; background:var(--paper); color:var(--ink); font-family:var(--sans);
+    -webkit-user-select:none; user-select:none; }
+  body { padding: max(16px, env(safe-area-inset-top)) 14px max(30px, env(safe-area-inset-bottom)); }
+  input, textarea, select, button { font-family:var(--sans); font-size:16px; } /* 16px prevents iOS zoom */
+  button { cursor:pointer; }
+  .wrap { max-width: 900px; margin: 0 auto; }
+  h1 { font-size:19px; font-weight:600; margin:0; }
+  h2 { font-size:13px; font-weight:600; margin:0; }
+  .sub { font-size:12px; color:var(--sub); margin:2px 0 16px; }
+  .row { display:flex; align-items:center; }
+  .between { justify-content:space-between; }
+  .btn { background:var(--accent); color:#fff; border:none; padding:9px 12px; font-size:13px; }
+  .btn-outline { background:#fff; border:1px solid var(--line); color:var(--ink); padding:6px 10px; font-size:12px; }
+  .navbtn { background:#fff; border:1px solid var(--line); padding:5px 8px; font-size:13px; }
+  .dials { display:flex; flex-wrap:wrap; border:1px solid var(--line); background:var(--panel); margin-bottom:18px; }
+  .dial { padding:12px 16px; border-right:1px solid var(--line); flex:1; min-width:100px; }
+  .dial .lbl { font-size:10.5px; color:var(--sub); letter-spacing:.02em; }
+  .dial .val { font-family:var(--mono); font-size:24px; font-weight:600; }
+  .dial .delta { font-family:var(--mono); font-size:11px; margin-top:2px; }
+  .section { margin-bottom:22px; }
+  .section-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:8px; }
+  svg.chart { width:100%; height:200px; display:block; }
+  .grid7 { display:grid; grid-template-columns:repeat(7,1fr); gap:1px; background:var(--line); border:1px solid var(--line); }
+  @media (max-width:680px){ .grid7{ grid-template-columns:1fr; } }
+  .day { background:var(--panel); min-height:130px; padding:8px; }
+  .day-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; }
+  .day-date { font-family:var(--mono); font-size:11px; color:var(--sub); }
+  .day-date.today { color:var(--accent2); font-weight:700; }
+  .day-add { background:none; border:none; color:var(--accent); font-size:18px; line-height:1; padding:2px 4px; }
+  .day-weather { font-size:10px; font-family:var(--mono); color:var(--sub); margin-bottom:6px; }
+  .wcard { display:flex; align-items:center; gap:6px; width:100%; text-align:left; background:#fff;
+    border:1px solid var(--line); padding:5px 7px; margin-bottom:5px; font-size:11px; }
+  .wcard .dot { width:8px; height:8px; flex:none; }
+  .wcard .t { flex:1; }
+  .wcard .m { font-family:var(--mono); color:var(--sub); font-size:10px; }
+  .wcard.done .t { text-decoration:line-through; opacity:.5; }
+  table { width:100%; border-collapse:collapse; font-family:var(--mono); font-size:12px; }
+  th,td { padding:5px 8px; text-align:left; }
+  thead tr { border-bottom:1px solid var(--line); color:var(--sub); }
+  tbody tr { border-bottom:1px solid var(--line); }
+  .overlay { position:fixed; inset:0; background:rgba(27,29,25,.45); display:flex; align-items:center;
+    justify-content:center; z-index:50; padding:16px; }
+  .modal { background:var(--panel); border:1px solid var(--line); width:100%; max-width:460px;
+    max-height:88vh; overflow-y:auto; padding:18px; -webkit-user-select:text; user-select:text; }
+  .modal h3 { font-size:15px; margin:0; }
+  .field { display:block; margin-bottom:10px; }
+  .field .lbl { font-size:11px; color:var(--sub); margin-bottom:3px; }
+  .field input, .field select, .field textarea { width:100%; padding:7px 8px; border:1px solid var(--line);
+    background:#fff; box-sizing:border-box; }
+  .field textarea { min-height:50px; }
+  .close { background:none; border:none; font-size:20px; line-height:1; color:var(--ink); }
+  .box { border:1px solid var(--line); padding:10px; margin-bottom:10px; background:#fff; }
+  .miniLbl { font-size:10px; color:var(--sub); margin-bottom:2px; }
+  .erg-row { display:flex; gap:6px; margin-bottom:6px; }
+  .erg-row > div { flex:1; }
+  .goal-box { background:#fff; border:1px solid var(--line); padding:10px; margin-bottom:10px; }
+  .goal-box .h { font-size:11px; color:var(--sub); margin-bottom:3px; }
+  .warn-box { background:#fff; border:1px solid var(--warn); color:var(--warn); padding:10px; font-size:12px; margin-bottom:10px; }
+  .good-txt { color:var(--good); font-size:12px; margin-bottom:10px; }
+  .wizard-item { background:#fff; border:1px solid var(--line); padding:10px; margin-bottom:8px; }
+  .wizard-item .top { display:flex; align-items:center; gap:6px; margin-bottom:4px; }
+  .wizard-item .top .dot { width:10px; height:10px; }
+  .wizard-item .top b { font-size:13px; }
+  .wizard-item .meta { margin-left:auto; font-family:var(--mono); font-size:11px; color:var(--sub); }
+  .wizard-item .goal { font-size:12px; color:var(--sub); margin-bottom:4px; }
+  .wizard-item .wnote { font-size:11px; color:var(--sub); font-family:var(--mono); }
+  .hoursrow { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+  .hoursrow .dayname { width:100px; font-size:12px; }
+  .hoursrow input { width:70px; padding:6px 8px; border:1px solid var(--line); }
+  .hoursrow .wx { margin-left:auto; font-size:11px; color:var(--sub); font-family:var(--mono); }
+</style>
+</head>
+<body>
+<div class="wrap" id="app"><p class="sub">Lädt …</p></div>
+
+<script>
+/* ================= design tokens (JS) ================= */
+const T = { z1:"#9AA6A0", z2:"#2C5F63", z3:"#C99A3B", sst:"#C2751F", thr:"#C24A1F", vo2:"#A32B1E", ana:"#6E1610",
+  accent:"#2C5F63", accent2:"#C24A1F", sub:"#6B6E64", line:"#D7D5C9", ink:"#1B1D19" };
+
+/* ================= static fitness data ================= */
+const FITNESS = [
+  { date:"08-05", ctl:10.0, atl:13.1, tsb:-3.1 }, { date:"08-08", ctl:9.3, atl:8.5, tsb:0.7 },
+  { date:"08-11", ctl:8.6, atl:5.6, tsb:3.1 }, { date:"08-13", ctl:10.9, atl:19.1, tsb:-8.2 },
+  { date:"08-15", ctl:10.4, atl:14.3, tsb:-4.0 }, { date:"08-17", ctl:9.9, atl:10.8, tsb:-0.9 },
+  { date:"08-19", ctl:9.4, atl:8.1, tsb:1.3 }, { date:"08-21", ctl:9.0, atl:6.1, tsb:2.9 },
+  { date:"08-23", ctl:8.6, atl:4.6, tsb:4.0 }, { date:"08-25", ctl:8.2, atl:3.4, tsb:4.7 },
+  { date:"08-27", ctl:7.8, atl:2.6, tsb:5.2 }, { date:"08-29", ctl:7.4, atl:1.9, tsb:5.5 },
+  { date:"08-31", ctl:7.1, atl:1.5, tsb:5.6 }, { date:"09-01", ctl:10.5, atl:21.4, tsb:-10.9 },
+  { date:"09-02", ctl:10.2, atl:18.5, tsb:-8.3 }, { date:"09-03", ctl:10.0, atl:16.1, tsb:-6.1 },
+  { date:"09-04", ctl:9.8, atl:13.9, tsb:-4.2 },
+];
+let FITNESS_LIVE = null; // wird nach Sync mit intervals.icu befüllt
+let ACTIVITIES_LIVE = null;
+function currentFitness(){ return FITNESS_LIVE || FITNESS; }
+function currentActivities(){ return ACTIVITIES_LIVE || ACTIVITIES_STATIC; }
+function CURR(){ const f=currentFitness(); return f[f.length-1]; }
+function WEEKAGO(){ const f=currentFitness(); return f[f.length-8] || f[0]; }
+
+const ACTIVITIES_STATIC = [
+  { date:"2026-09-01", name:"Ride", km:56.4, min:124, elev:873, hr:158, load:151 },
+  { date:"2026-09-01", name:"Lunch Radfahren", km:58.2, min:123, elev:443, hr:null, load:null },
+  { date:"2026-08-29", name:"Lunch Radfahren", km:86.6, min:240, elev:700, hr:null, load:null },
+  { date:"2026-08-18", name:"Lunch Radfahren", km:49.9, min:143, elev:396, hr:null, load:null },
+  { date:"2026-08-17", name:"Lunch Radfahren", km:62.6, min:181, elev:516, hr:null, load:null },
+  { date:"2026-08-13", name:"Afternoon Radfahren", km:52.4, min:120, elev:283, hr:154, load:112 },
+  { date:"2026-08-02", name:"Afternoon Radfahren", km:46.5, min:130, elev:96, hr:126, load:61 },
+  { date:"2026-07-29", name:"Morning Radfahren", km:45.4, min:118, elev:215, hr:146, load:105 },
+  { date:"2026-07-22", name:"Afternoon Radfahren", km:68.9, min:157, elev:154, hr:147, load:141 },
+];
+
+const WEATHER = {
+  "2026-09-04": { high:30.5, low:15.3, precip:0 }, "2026-09-05": { high:23.0, low:10.4, precip:70 },
+  "2026-09-06": { high:23.9, low:10.1, precip:5 }, "2026-09-07": { high:27.6, low:11.6, precip:5 },
+  "2026-09-08": { high:29.2, low:14.9, precip:15 }, "2026-09-09": { high:17.1, low:10.4, precip:65 },
+  "2026-09-10": { high:17.2, low:10.1, precip:15 },
+};
+const getWeather = (k) => WEATHER[k] || null;
+const isOutdoorFriendly = (w) => w && w.precip < 50 && w.high > 3;
+
+const DISCIPLINES = {
+  rolle:{ label:"Rad · Rolle", color:T.accent }, rad:{ label:"Rad · Draußen", color:T.accent },
+  lauf:{ label:"Lauf", color:T.sst }, schwimmen:{ label:"Schwimmen", color:T.z1 },
+  kraft:{ label:"Kraft", color:T.sub }, sonstiges:{ label:"Sonstiges", color:T.sub },
+};
+const ZONES = [
+  { id:"z1", label:"Z1 · Erholung", iF:0.55 }, { id:"z2", label:"Z2 · Grundlage", iF:0.65 },
+  { id:"z3", label:"Z3 · Tempo", iF:0.80 }, { id:"sst", label:"Sweet Spot", iF:0.88 },
+  { id:"thr", label:"Schwelle", iF:0.95 }, { id:"vo2", label:"VO2max", iF:1.05 }, { id:"ana", label:"Anaerob", iF:1.15 },
+];
+const zoneById = (id) => ZONES.find(z => z.id === id) || ZONES[1];
+const estLoad = (min, zoneId) => Math.round(Math.pow(zoneById(zoneId).iF, 2) * 100 * (min / 60));
+
+/* ================= date helpers ================= */
+const iso = (d) => d.toISOString().slice(0, 10);
+const startOfWeek = (d) => { const x=new Date(d); const day=(x.getDay()+6)%7; x.setDate(x.getDate()-day); x.setHours(0,0,0,0); return x; };
+const WEEKDAYS = ["Mo","Di","Mi","Do","Fr","Sa","So"];
+const WEEKDAYS_FULL = ["Montag","Dienstag","Mittwoch","Donnerstag","Freitag","Samstag","Sonntag"];
+
+/* ================= real Munich loop routes ================= */
+const BIKE_LOOPS = [
+  { name:"Isar-Süd-Rundkurs (beidufrig)", km:46, gain:190, pts:[
+    [48.1374,11.5755],[48.1120,11.5480],[48.0930,11.5470],[48.0680,11.5300],[48.0508,11.5122],
+    [48.0330,11.4980],[48.0223,11.4934],[47.9980,11.4700],[48.0223,11.5050],[48.0400,11.5220],
+    [48.0600,11.5430],[48.0850,11.5600],[48.1120,11.5680],[48.1374,11.5755] ] },
+  { name:"Nord-Rundkurs Englischer Garten – Ismaning", km:31, gain:45, pts:[
+    [48.1374,11.5755],[48.1495,11.6020],[48.1700,11.6150],[48.1950,11.6450],[48.2200,11.6700],
+    [48.2333,11.6833],[48.2050,11.6550],[48.1800,11.6250],[48.1600,11.6050],[48.1374,11.5755] ] },
+  { name:"Würmtal-Rundkurs Starnberg", km:61, gain:230, pts:[
+    [48.1374,11.5755],[48.1218,11.4780],[48.0980,11.4550],[48.0791,11.4257],[48.0480,11.3980],
+    [48.0210,11.3690],[47.9986,11.3427],[48.0100,11.3850],[48.0400,11.4150],[48.0700,11.4400],
+    [48.0980,11.4700],[48.1218,11.4950],[48.1374,11.5755] ] },
+];
+const RUN_LOOPS = [
+  { name:"Englischer Garten – Rundweg", km:5.5, gain:20, pts:[
+    [48.1495,11.6020],[48.1600,11.6050],[48.1700,11.6100],[48.1750,11.6250],[48.1650,11.6300],[48.1550,11.6200],[48.1495,11.6020] ] },
+  { name:"Isarauen – Rundweg", km:9, gain:35, pts:[
+    [48.1300,11.5650],[48.1100,11.5450],[48.0930,11.5470],[48.1000,11.5600],[48.1150,11.5700],[48.1300,11.5650] ] },
+];
+const toRad = (v) => v * Math.PI / 180;
+function haversine([lat1,lon1],[lat2,lon2]) {
+  const R=6371, dLat=toRad(lat2-lat1), dLon=toRad(lon2-lon1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+function loopDistance(pts){ let d=0; for(let i=1;i<pts.length;i++) d+=haversine(pts[i-1],pts[i]); return d; }
+function interpolateLoop(pts, perSeg=5){
+  const out=[];
+  for(let i=0;i<pts.length-1;i++){
+    const [lat1,lon1]=pts[i], [lat2,lon2]=pts[i+1];
+    for(let s=0;s<perSeg;s++){ const f=s/perSeg; out.push({lat:lat1+(lat2-lat1)*f, lon:lon1+(lon2-lon1)*f}); }
+  }
+  out.push({lat:pts[pts.length-1][0], lon:pts[pts.length-1][1]});
+  return out;
+}
+function genRealRoute(distanceKm, discipline){
+  const pool = discipline === "lauf" ? RUN_LOOPS : BIKE_LOOPS;
+  const template = pool.reduce((best,t)=> Math.abs(t.km-distanceKm)<Math.abs(best.km-distanceKm)?t:best, pool[0]);
+  const laps = Math.max(1, Math.round(distanceKm/template.km));
+  const points = interpolateLoop(template.pts);
+  let allPoints=[]; for(let l=0;l<laps;l++) allPoints=allPoints.concat(points);
+  const baseEle=520;
+  const withEle = allPoints.map((p,i)=>({...p, ele: Math.round(baseEle + template.gain*0.5*(1+Math.sin((i/allPoints.length)*Math.PI*2*laps)))}));
+  const actualKm = +(loopDistance(template.pts)*laps).toFixed(1);
+  return { points: withEle, km: actualKm, elevGain: template.gain*laps, templateName: template.name, laps };
+}
+function routeToGpx(route, name){
+  const trkpts = route.points.map(p=>`      <trkpt lat="${p.lat.toFixed(6)}" lon="${p.lon.toFixed(6)}"><ele>${p.ele}</ele></trkpt>`).join("\n");
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Trainings-Dashboard">\n  <trk>\n    <name>${name}</name>\n    <trkseg>\n${trkpts}\n    </trkseg>\n  </trk>\n</gpx>\n`;
+}
+function parseGpx(text){
+  try{
+    const doc=new DOMParser().parseFromString(text,"application/xml");
+    const pts=Array.from(doc.getElementsByTagName("trkpt"));
+    if(!pts.length) return null;
+    let dist=0, gain=0, prevLat, prevLon, prevEle;
+    pts.forEach((p,i)=>{
+      const lat=parseFloat(p.getAttribute("lat")), lon=parseFloat(p.getAttribute("lon"));
+      const eleNode=p.getElementsByTagName("ele")[0]; const ele=eleNode?parseFloat(eleNode.textContent):null;
+      if(i>0){ dist+=haversine([prevLat,prevLon],[lat,lon]); if(ele!=null && prevEle!=null && ele>prevEle) gain+=ele-prevEle; }
+      prevLat=lat; prevLon=lon; if(ele!=null) prevEle=ele;
+    });
+    return { points: pts.length, km: dist, elevGain: Math.round(gain) };
+  } catch { return null; }
+}
+function buildErg({warmupMin,warmupW,reps,workMin,workW,restMin,restW,cooldownMin,cooldownW}){
+  let t=0; const rows=[];
+  const push=(min,w)=>{ rows.push([t.toFixed(2), Math.round(w)]); t+=min; rows.push([t.toFixed(2), Math.round(w)]); };
+  push(warmupMin,warmupW); for(let i=0;i<reps;i++){ push(workMin,workW); push(restMin,restW); } push(cooldownMin,cooldownW);
+  const body = rows.map(r=>`${r[0]}\t${r[1]}`).join("\n");
+  return `[COURSE HEADER]\nVERSION = 2\nUNITS = ENGLISH\nDESCRIPTION = Generiert im Trainings-Dashboard\nFILE NAME = workout.erg\nMINUTES WATTS\n[END COURSE HEADER]\n[COURSE DATA]\n${body}\n[END COURSE DATA]\n`;
+}
+function downloadFile(filename, content, mime="text/plain"){
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href=url; a.download=filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url), 2000);
+}
+function trainingPhase(ctl){
+  if(ctl<20) return { label:"Grundlagenaufbau", note:"Sehr niedrige Fitness — Fokus liegt auf lockerer, häufiger Belastung statt Intensität. Intensitätsverteilung ca. 90/10 (leicht/hart), angelehnt an das polarisierte Modell nach Seiler." };
+  if(ctl<40) return { label:"Grundlage / Übergang", note:"Basis ist gelegt — erste gezielte Tempo- und Schwellenreize werden ergänzt. Verteilung ca. 80/20." };
+  return { label:"Aufbau / Intensivierung", note:"Solide Basis vorhanden — VO2max- und Schwellenintervalle bekommen mehr Gewicht." };
+}
+function generateAutoPlan(days, ctl){
+  const active = days.filter(d=>d.hours>0).sort((a,b)=>b.hours-a.hours);
+  if(!active.length) return { workouts:[], warning:"Keine Trainingstage ausgewählt." };
+  const workouts=[]; const used=new Set();
+  const assign=(day, discipline, minutes, zone, title, goal)=>{
+    used.add(day.key);
+    const weather=getWeather(day.key); const outdoorOk=isOutdoorFriendly(weather);
+    let finalDiscipline=discipline; if(discipline==="rad" && !outdoorOk) finalDiscipline="rolle";
+    const w={ id:Date.now()+Math.random(), done:false, dateKey:day.key, discipline:finalDiscipline, title, duration:minutes,
+      zone, load:estLoad(minutes,zone), goal,
+      weatherNote: weather ? `${weather.high.toFixed(0)}°C, Regenwahrscheinlichkeit ${weather.precip}%${finalDiscipline!==discipline?" → wegen Wetter auf Rolle verlegt":""}` : "Keine Vorhersage verfügbar — Standardannahme." };
+    if(finalDiscipline==="rad" || finalDiscipline==="lauf"){
+      const speed = finalDiscipline==="rad" ? 24 : 7;
+      const km = +(speed*(minutes/60)).toFixed(1);
+      const route = genRealRoute(km, finalDiscipline);
+      w.gpx = { km:route.km, elevGain:route.elevGain, points:route.points.length, templateName:route.templateName, laps:route.laps, real:true };
+    }
+    if(finalDiscipline==="rolle"){
+      w.erg = { warmupMin:12, warmupW:80, reps: zone==="z2"?0:4, workMin:3, workW:200, restMin:3, restW:90, cooldownMin:10, cooldownW:70 };
+    }
+    workouts.push(w);
+  };
+  const longDay = active[0];
+  assign(longDay, "rad", Math.min(longDay.hours*60,180), "z2", "Lange Grundlagenfahrt",
+    "Aerobe Grundlagenausdauer: verbessert Kapillarisierung, Fettstoffwechsel und mitochondriale Dichte — das Fundament der Wettkampfausdauer für den Triathlon.");
+  const secondRideDay = active.find(d=>!used.has(d.key) && d.hours>=0.75);
+  if(secondRideDay) assign(secondRideDay,"rad",Math.min(secondRideDay.hours*60,90),"z2","Rad mit Tempo-Reizen",
+    "Hält die aerobe Basis und setzt sanfte Tempo-Reize — bereitet die Muskulatur behutsam auf spätere Schwellenarbeit vor, ohne die Regeneration zu gefährden.");
+  const runDays = active.filter(d=>!used.has(d.key) && d.hours>=0.3).slice(0,2);
+  runDays.forEach(d=>assign(d,"lauf",Math.min(d.hours*60,30),"z1","Lauf (Run/Walk 3:1)",
+    "Aerobe Laufökonomie und Gewöhnung von Sehnen/Bändern an kontinuierliche Belastung — wichtig, da deine bisherige Basis aus intervallastigem Handball stammt, nicht aus Dauerbelastung. Tempo bewusst langsam halten."));
+  const strengthDay = active.find(d=>!used.has(d.key) && d.hours>=0.3);
+  if(strengthDay) assign(strengthDay,"kraft",Math.min(strengthDay.hours*60,35),"z1","Rumpf & Mobility",
+    "Rumpfstabilität und muskuläre Grundkraft — unterstützt die Lauf-/Radökonomie und beugt Überlastungen beim Laufaufbau vor.");
+  const totalLoad = workouts.reduce((s,w)=>s+w.load,0);
+  const safeLoad = ctl*7*1.15;
+  const warning = totalLoad > safeLoad*1.25 ? `Geplante Wochenlast (${totalLoad}) liegt deutlich über einem verträglichen Aufbau-Tempo (~${Math.round(safeLoad)}). Risiko für Übertraining/Verletzung — Umfang oder Intensität reduzieren.` : null;
+  return { workouts, warning, totalLoad, safeLoad:Math.round(safeLoad) };
+}
+
+/* ================= state ================= */
+const API = "/.netlify/functions";
+const state = {
+  plan: {},
+  settings: { ftp: "", hrMax: "" },
+  weekStart: startOfWeek(new Date()),
+  modal: null, // {type:'add', dateKey} | {type:'detail', workout} | {type:'wizard'} | {type:'settings'}
+  wizardStep: 1, wizardHours: {}, wizardResult: null, wizardSource: null, wizardLoading: false, wizardError: null,
+  syncStatus: "idle", // idle | loading | ok | error
+  ready: false,
+};
+
+async function loadState(){
+  try {
+    const [planRes, settingsRes] = await Promise.all([
+      fetch(`${API}/plan`).then(r=>r.json()).catch(()=>({})),
+      fetch(`${API}/settings`).then(r=>r.json()).catch(()=>({ftp:"",hrMax:""})),
+    ]);
+    state.plan = planRes || {};
+    state.settings = settingsRes || { ftp:"", hrMax:"" };
+  } catch(e) {
+    console.error("Konnte Backend nicht erreichen, starte mit leerem Plan:", e);
+  }
+  state.ready = true;
+  render();
+}
+function persistPlan(){
+  fetch(`${API}/plan`, { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(state.plan) })
+    .catch(e=>console.error("Plan konnte nicht gespeichert werden:", e));
+}
+function persistSettings(){
+  fetch(`${API}/settings`, { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(state.settings) })
+    .catch(e=>console.error("Einstellungen konnten nicht gespeichert werden:", e));
+}
+async function syncFromIntervals(){
+  state.syncStatus = "loading"; render();
+  try {
+    const [fitness, activities] = await Promise.all([
+      fetch(`${API}/intervals-fitness`).then(r=>r.json()),
+      fetch(`${API}/intervals-activities`).then(r=>r.json()),
+    ]);
+    if (fitness.error || activities.error) throw new Error(fitness.error || activities.error);
+    if (fitness.length) FITNESS_LIVE = fitness;
+    if (activities.length) ACTIVITIES_LIVE = activities;
+    state.syncStatus = "ok";
+  } catch(e) {
+    console.error("intervals.icu-Sync fehlgeschlagen:", e);
+    state.syncStatus = "error";
+  }
+  render();
+}
+function weekDays(){ return Array.from({length:7},(_,i)=>{ const d=new Date(state.weekStart); d.setDate(d.getDate()+i); return d; }); }
+
+function addWorkout(dateKey, w){
+  const list = state.plan[dateKey] ? [...state.plan[dateKey]] : [];
+  list.push({ id:Date.now()+Math.random(), done:false, ...w });
+  state.plan[dateKey]=list; persistPlan();
+}
+function updateWorkout(dateKey, id, patch){
+  state.plan[dateKey] = (state.plan[dateKey]||[]).map(w=> w.id===id ? {...w,...patch} : w);
+  persistPlan();
+}
+function removeWorkout(dateKey, id){
+  state.plan[dateKey] = (state.plan[dateKey]||[]).filter(w=>w.id!==id);
+  persistPlan();
+}
+function applyAutoPlan(workouts){
+  workouts.forEach(w=>{ state.plan[w.dateKey] = [...(state.plan[w.dateKey]||[]), w]; });
+  persistPlan();
+}
+
+/* ================= SVG chart ================= */
+function lineChartSVG(data, keys, colors, w=680, h=200){
+  const pad = { l:34, r:10, t:10, b:20 };
+  const xs = data.map((_,i)=> pad.l + (i/(data.length-1)) * (w-pad.l-pad.r));
+  const allVals = keys.flatMap(k=>data.map(d=>d[k]));
+  const min = Math.min(...allVals, 0), max = Math.max(...allVals);
+  const y = (v)=> h-pad.b - ((v-min)/(max-min||1)) * (h-pad.t-pad.b);
+  let svg = `<svg class="chart" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">`;
+  svg += `<line x1="${pad.l}" y1="${y(0)}" x2="${w-pad.r}" y2="${y(0)}" stroke="${T.line}" stroke-width="1"/>`;
+  keys.forEach((k,ki)=>{
+    const pts = data.map((d,i)=>`${xs[i]},${y(d[k])}`).join(" ");
+    svg += `<polyline points="${pts}" fill="none" stroke="${colors[ki]}" stroke-width="${ki===0?2:1.5}" stroke-dasharray="${k==='tsb'?'3,2':'none'}"/>`;
+  });
+  data.forEach((d,i)=>{ if(i%3===0) svg += `<text x="${xs[i]}" y="${h-4}" font-size="9" font-family="var(--mono)" fill="${T.sub}" text-anchor="middle">${d.date}</text>`; });
+  svg += `</svg>`;
+  return svg;
+}
+function miniSparkSVG(data, keys, colors, w=220, h=60){
+  const xs = data.map((_,i)=> (i/(data.length-1)) * w);
+  const allVals = keys.flatMap(k=>data.map(d=>d[k]));
+  const min=Math.min(...allVals), max=Math.max(...allVals);
+  const y=(v)=> h - ((v-min)/(max-min||1))*h;
+  let svg = `<svg width="100%" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">`;
+  keys.forEach((k,ki)=>{
+    const pts = data.map((d,i)=>`${xs[i]},${y(d[k])}`).join(" ");
+    svg += `<polyline points="${pts}" fill="none" stroke="${colors[ki]}" stroke-width="${ki===0?2:1.5}" stroke-dasharray="${k==='tsb'?'3,2':'none'}"/>`;
+  });
+  svg += `</svg>`;
+  return svg;
+}
+
+/* ================= render ================= */
+function render(){
+  const app = document.getElementById("app");
+  const days = weekDays();
+  const phase = trainingPhase(CURR().ctl);
+
+  const weekLoadByDisc = {};
+  let weekTotalMin = 0, weekTotalLoad = 0;
+  days.forEach(d=>{ (state.plan[iso(d)]||[]).forEach(w=>{
+    weekLoadByDisc[w.discipline]=(weekLoadByDisc[w.discipline]||0)+(w.load||0);
+    weekTotalMin += Number(w.duration||0); weekTotalLoad += (w.load||0);
+  }); });
+
+  app.innerHTML = `
+    <div class="row between" style="align-items:baseline; margin-bottom:4px;">
+      <h1>Trainingsstand</h1>
+      <div class="row" style="gap:8px;">
+        <button class="btn-outline" onclick="syncFromIntervals()">${syncLabel()}</button>
+        <button class="btn-outline" onclick="openSettings()">FTP / HFmax</button>
+      </div>
+    </div>
+    <p class="sub">Ziel: Triathlon Frühjahr/Sommer 2027 · ${phase.label}</p>
+
+    <div class="dials">
+      <div class="dial"><div class="lbl">CTL — FITNESS</div><div class="val">${CURR().ctl.toFixed(1)}</div>
+        <div class="delta" style="color:${CURR().ctl-WEEKAGO().ctl>=0?T.accent:T.accent2}">${(CURR().ctl-WEEKAGO().ctl>=0?"+":"")}${(CURR().ctl-WEEKAGO().ctl).toFixed(1)} / 7 Tage</div></div>
+      <div class="dial"><div class="lbl">ATL — ERMÜDUNG</div><div class="val">${CURR().atl.toFixed(1)}</div>
+        <div class="delta" style="color:${CURR().atl-WEEKAGO().atl>=0?T.accent:T.accent2}">${(CURR().atl-WEEKAGO().atl>=0?"+":"")}${(CURR().atl-WEEKAGO().atl).toFixed(1)} / 7 Tage</div></div>
+      <div class="dial"><div class="lbl">TSB — FORM</div><div class="val">${CURR().tsb.toFixed(1)}</div>
+        <div class="delta" style="color:${CURR().tsb-WEEKAGO().tsb>=0?T.accent:T.accent2}">${(CURR().tsb-WEEKAGO().tsb>=0?"+":"")}${(CURR().tsb-WEEKAGO().tsb).toFixed(1)} / 7 Tage</div></div>
+      <div class="dial" style="min-width:200px; border-right:none;">${miniSparkSVG(currentFitness(),["ctl","tsb"],[T.accent,T.accent2])}</div>
+    </div>
+
+    <div class="section">
+      <div class="section-head"><h2>Fitness-Verlauf · 30 Tage</h2></div>
+      ${lineChartSVG(currentFitness(), ["ctl","atl","tsb"], [T.accent, T.sst, T.accent2])}
+    </div>
+
+    <div class="section">
+      <div class="section-head">
+        <h2>Wochenplaner</h2>
+        <div class="row" style="gap:8px;">
+          <button class="btn" onclick="openWizard()">Plan automatisch erstellen</button>
+          <button class="navbtn" onclick="shiftWeek(-7)">‹</button>
+          <span style="font-family:var(--mono); font-size:12px;">${iso(days[0])} – ${iso(days[6])}</span>
+          <button class="navbtn" onclick="shiftWeek(7)">›</button>
+        </div>
+      </div>
+      <div class="grid7">
+        ${days.map(d=>{
+          const key = iso(d); const isToday = key===iso(new Date());
+          const workouts = state.plan[key]||[]; const w = getWeather(key);
+          return `<div class="day">
+            <div class="day-head">
+              <span class="day-date ${isToday?'today':''}">${WEEKDAYS[(d.getDay()+6)%7]} ${d.getDate()}.${d.getMonth()+1}.</span>
+              <button class="day-add" onclick="openAdd('${key}')">+</button>
+            </div>
+            ${w ? `<div class="day-weather">${w.precip>=50?'🌧':w.precip>=20?'☁':'☀'} ${w.high.toFixed(0)}° · ${w.precip}%</div>` : ""}
+            ${workouts.map(wk=>{
+              const disc = DISCIPLINES[wk.discipline];
+              return `<button class="wcard ${wk.done?'done':''}" style="border-left:3px solid ${disc.color}" onclick='openDetail(${JSON.stringify(wk.id)}, "${key}")'>
+                <span class="t">${wk.title||disc.label}</span><span class="m">${wk.duration}′</span></button>`;
+            }).join("")}
+          </div>`;
+        }).join("")}
+      </div>
+      <div class="row" style="gap:18px; margin-top:10px; font-family:var(--mono); font-size:12px; color:var(--sub);">
+        <span>Geplant: <b style="color:var(--ink)">${(weekTotalMin/60).toFixed(1)} h</b></span>
+        <span>Load gesamt: <b style="color:var(--ink)">${weekTotalLoad}</b></span>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2 style="margin-bottom:8px;">Letzte Aktivitäten</h2>
+      <div style="overflow-x:auto;">
+        <table><thead><tr><th>Datum</th><th>Aktivität</th><th>km</th><th>Zeit</th><th>Hm</th><th>Ø HF</th><th>Load</th></tr></thead>
+          <tbody>${currentActivities().map(a=>`<tr><td>${a.date}</td><td style="font-family:var(--sans)">${a.name}</td><td>${a.km.toFixed(1)}</td>
+            <td>${Math.floor(a.min/60)}:${String(a.min%60).padStart(2,"0")}</td><td>${a.elev}</td><td>${a.hr??"–"}</td><td>${a.load??"–"}</td></tr>`).join("")}
+          </tbody></table>
+      </div>
+    </div>
+  `;
+
+  renderModal();
+}
+
+function shiftWeek(deltaDays){ const n=new Date(state.weekStart); n.setDate(n.getDate()+deltaDays); state.weekStart=n; render(); }
+
+/* ================= modals ================= */
+function openAdd(dateKey){ state.modal = { type:"add", dateKey, discipline:"rolle", title:"", duration:60, zone:"z2", notes:"", routeLink:"", customKm:"",
+  erg:{warmupMin:15,warmupW:80,reps:4,workMin:4,workW:220,restMin:4,restW:90,cooldownMin:10,cooldownW:70} }; render(); }
+function closeModal(){ state.modal=null; render(); }
+function openSettings(){ state.modal = { type:"settings", ftp:state.settings.ftp, hrMax:state.settings.hrMax }; render(); }
+function openWizard(){ state.wizardStep=1; state.wizardHours = Object.fromEntries(weekDays().map(d=>[iso(d),0])); state.wizardResult=null;
+  state.wizardSource=null; state.wizardLoading=false; state.wizardError=null;
+  state.modal = { type:"wizard" }; render(); }
+function openDetail(id, dateKey){
+  const w = (state.plan[dateKey]||[]).find(x=>x.id===id);
+  if(w) { state.modal = { type:"detail", workout:w, dateKey }; render(); }
+}
+
+function renderModal(){
+  const existing = document.getElementById("overlay");
+  if(existing) existing.remove();
+  if(!state.modal) return;
+  const div = document.createElement("div");
+  div.id="overlay"; div.className="overlay";
+  div.onclick = (e)=>{ if(e.target===div) closeModal(); };
+  div.innerHTML = `<div class="modal" onclick="event.stopPropagation()">${modalContent()}</div>`;
+  document.body.appendChild(div);
+}
+
+function modalContent(){
+  const m = state.modal;
+  if(m.type==="settings") return `
+    <div class="row between" style="margin-bottom:10px;"><h3>Schwellenwerte</h3><button class="close" onclick="closeModal()">×</button></div>
+    <p class="sub" style="margin-top:0">Nach dem Ramp-Test hier eintragen.</p>
+    <label class="field"><div class="lbl">FTP (Watt)</div><input type="number" id="s-ftp" value="${m.ftp}"></label>
+    <label class="field"><div class="lbl">HFmax (bpm)</div><input type="number" id="s-hrmax" value="${m.hrMax}"></label>
+    <button class="btn" style="width:100%" onclick="saveSettings()">Speichern</button>`;
+
+  if(m.type==="add") return renderAddModal(m);
+  if(m.type==="wizard") return renderWizardModal();
+  if(m.type==="detail") return renderDetailModal(m);
+  return "";
+}
+
+function saveSettings(){
+  state.settings = { ftp: document.getElementById("s-ftp").value, hrMax: document.getElementById("s-hrmax").value };
+  persistSettings(); closeModal();
+}
+
+function renderAddModal(m){
+  const isRolle = m.discipline==="rolle";
+  const isRoute = m.discipline==="rad" || m.discipline==="lauf";
+  const speed = m.discipline==="rad" ? 24 : 7;
+  const estKm = +(speed*(m.duration/60)).toFixed(1);
+  const km = m.customKm ? Number(m.customKm) : estKm;
+  const preview = isRoute ? genRealRoute(km, m.discipline) : null;
+  const load = estLoad(m.duration, m.zone);
+  return `
+    <div class="row between" style="margin-bottom:10px;"><h3>Workout planen · ${m.dateKey}</h3><button class="close" onclick="closeModal()">×</button></div>
+    <label class="field"><div class="lbl">Disziplin</div>
+      <select id="a-disc" onchange="updateAddField('discipline', this.value)">
+        ${Object.entries(DISCIPLINES).map(([k,v])=>`<option value="${k}" ${k===m.discipline?"selected":""}>${v.label}</option>`).join("")}
+      </select></label>
+    <label class="field"><div class="lbl">Titel (optional)</div><input id="a-title" value="${m.title}" placeholder="${DISCIPLINES[m.discipline].label}" onchange="updateAddField('title', this.value)"></label>
+    <div class="row" style="gap:10px;">
+      <label class="field" style="flex:1"><div class="lbl">Dauer (min)</div><input type="number" id="a-dur" value="${m.duration}" onchange="updateAddField('duration', this.value)"></label>
+      <label class="field" style="flex:1"><div class="lbl">Zone</div><select id="a-zone" onchange="updateAddField('zone', this.value)">
+        ${ZONES.map(z=>`<option value="${z.id}" ${z.id===m.zone?"selected":""}>${z.label}</option>`).join("")}</select></label>
+    </div>
+    <div class="sub" style="font-family:var(--mono)">geschätzter Load: ${load}</div>
+    ${isRolle ? `<div class="box"><div class="miniLbl" style="margin-bottom:8px;">ERG-Struktur (Magene T300 / ANT+ FE-C)</div>${ergFieldsHTML(m.erg)}</div>` : ""}
+    ${isRoute ? `<div class="box"><div class="miniLbl" style="margin-bottom:8px;">GPX-Rundkurs (wird beim Speichern erzeugt)</div>
+        <label class="field"><div class="lbl">Ziel-Distanz (km) — leer = geschätzt aus Dauer (${estKm} km)</div>
+        <input type="number" id="a-km" value="${m.customKm}" placeholder="${estKm}" onchange="updateAddField('customKm', this.value)"></label>
+        <div class="sub" style="font-family:var(--mono)">${preview.templateName}${preview.laps>1?` × ${preview.laps}`:""} · ${preview.km} km · ${preview.elevGain} Hm</div></div>` : ""}
+    ${!isRolle ? `<label class="field"><div class="lbl">Strava/Komoot-Link (optional)</div><input id="a-link" value="${m.routeLink}" placeholder="https://..." onchange="updateAddField('routeLink', this.value)"></label>` : ""}
+    <label class="field"><div class="lbl">Notizen</div><textarea id="a-notes" onchange="updateAddField('notes', this.value)">${m.notes}</textarea></label>
+    <button class="btn" style="width:100%" onclick="saveAdd()">Workout speichern</button>`;
+}
+function ergFieldsHTML(erg){
+  const f=(k,label)=>`<div><div class="miniLbl">${label}</div><input type="number" value="${erg[k]}" onchange="updateErgField('${k}', this.value)"></div>`;
+  return `<div class="erg-row">${f("warmupMin","Warmup min")}${f("warmupW","Warmup W")}</div>
+    <div class="erg-row">${f("reps","Wdh.")}${f("workMin","Belastung min")}${f("workW","Belastung W")}</div>
+    <div class="erg-row">${f("restMin","Erholung min")}${f("restW","Erholung W")}</div>
+    <div class="erg-row">${f("cooldownMin","Cooldown min")}${f("cooldownW","Cooldown W")}</div>`;
+}
+function updateAddField(key,val){ state.modal[key]= (key==="duration") ? Number(val) : val; render(); }
+function updateErgField(key,val){ state.modal.erg[key]=Number(val); render(); }
+function saveAdd(){
+  const m = state.modal;
+  const isRolle = m.discipline==="rolle"; const isRoute = m.discipline==="rad" || m.discipline==="lauf";
+  const speed = m.discipline==="rad" ? 24 : 7;
+  const estKm = +(speed*(m.duration/60)).toFixed(1);
+  const km = m.customKm ? Number(m.customKm) : estKm;
+  const w = { discipline:m.discipline, title: m.title || DISCIPLINES[m.discipline].label, duration:m.duration, zone:m.zone,
+    load: estLoad(m.duration, m.zone), notes:m.notes, routeLink:m.routeLink };
+  if(isRolle) w.erg = m.erg;
+  if(isRoute){ const route = genRealRoute(km, m.discipline);
+    w.gpx = { km:route.km, elevGain:route.elevGain, points:route.points.length, templateName:route.templateName, laps:route.laps, real:true }; }
+  addWorkout(m.dateKey, w); closeModal();
+}
+
+function renderWizardModal(){
+  const days = weekDays(); const phase = trainingPhase(CURR().ctl);
+  if(state.wizardStep===1) return `
+    <div class="row between" style="margin-bottom:10px;"><h3>Plan automatisch erstellen</h3><button class="close" onclick="closeModal()">×</button></div>
+    <div class="box"><div class="miniLbl" style="margin-bottom:4px;">Analyse deines aktuellen Fitnesszustands</div>
+      <div style="font-family:var(--mono); font-size:13px; margin-bottom:6px;">CTL ${CURR().ctl.toFixed(1)} · ATL ${CURR().atl.toFixed(1)} · TSB ${CURR().tsb.toFixed(1)} → <b>${phase.label}</b></div>
+      <div class="sub" style="margin:0;">${phase.note}</div></div>
+    <button class="btn" style="width:100%" onclick="wizardNext()">Weiter</button>`;
+  if(state.wizardStep===2) return `
+    <div class="row between" style="margin-bottom:10px;"><h3>Plan automatisch erstellen</h3><button class="close" onclick="closeModal()">×</button></div>
+    <p class="sub" style="margin-top:0">Wie viele Stunden hast du an jedem Tag realistisch Zeit?</p>
+    ${days.map(d=>{ const key=iso(d); const w=getWeather(key);
+      return `<div class="hoursrow"><div class="dayname">${WEEKDAYS_FULL[(d.getDay()+6)%7]}</div>
+        <input type="number" step="0.5" min="0" value="${state.wizardHours[key]}" onchange="updateWizardHours('${key}', this.value)">
+        ${w?`<span class="wx">${w.high.toFixed(0)}° · ${w.precip}% Regen</span>`:""}</div>`; }).join("")}
+    <div class="row" style="gap:8px; margin-top:8px;">
+      <button class="btn-outline" style="flex:1" onclick="wizardGenerate(false)">Regelbasiert generieren</button>
+      <button class="btn" style="flex:1" onclick="wizardGenerate(true)">Mit Claude generieren</button>
+    </div>`;
+  if(state.wizardStep===3 && state.wizardLoading){
+    return `<div class="row between" style="margin-bottom:10px;"><h3>Plan automatisch erstellen</h3><button class="close" onclick="closeModal()">×</button></div>
+      <p class="sub">Claude erstellt den Plan …</p>`;
+  }
+  if(state.wizardStep===3 && state.wizardError){
+    return `<div class="row between" style="margin-bottom:10px;"><h3>Plan automatisch erstellen</h3><button class="close" onclick="closeModal()">×</button></div>
+      <div class="warn-box">${state.wizardError}</div>
+      <button class="btn-outline" style="width:100%" onclick="wizardBack()">Zurück</button>`;
+  }
+  if(state.wizardStep===3 && state.wizardResult){
+    const r = state.wizardResult;
+    return `<div class="row between" style="margin-bottom:10px;"><h3>Plan automatisch erstellen ${state.wizardSource==="claude"?"· von Claude":"· regelbasiert"}</h3><button class="close" onclick="closeModal()">×</button></div>
+      ${r.warning ? `<div class="warn-box">${r.warning}</div>` : (r.workouts.length ? `<div class="good-txt">Wochenlast ${r.totalLoad} liegt innerhalb eines verträglichen Aufbau-Tempos (≈${r.safeLoad}).</div>` : "")}
+      ${r.workouts.map(w=>{ const disc=DISCIPLINES[w.discipline];
+        return `<div class="wizard-item"><div class="top"><span class="dot" style="background:${disc.color}"></span><b>${w.title}</b>
+          <span class="meta">${w.dateKey} · ${w.duration}′ · ${zoneById(w.zone).label}</span></div>
+          <div class="goal">${w.goal}</div><div class="wnote">${w.weatherNote}</div>
+          ${w.gpx?`<div class="wnote">Route: ${w.gpx.templateName} · ${w.gpx.km} km · ${w.gpx.elevGain} Hm</div>`:""}</div>`; }).join("")}
+      <div class="row" style="gap:8px; margin-top:8px;">
+        <button class="btn-outline" style="flex:1" onclick="wizardBack()">Zurück</button>
+        <button class="btn" style="flex:2" onclick="wizardApply()">In Wochenplan übernehmen</button>
+      </div>`;
+  }
+  return "";
+}
+function updateWizardHours(key,val){ state.wizardHours[key]=val; }
+function wizardNext(){ state.wizardStep=2; render(); }
+function wizardBack(){ state.wizardStep=2; state.wizardError=null; render(); }
+
+async function wizardGenerate(useClaude){
+  const dayList = weekDays().map(d=>({date:d, key:iso(d), hours:Number(state.wizardHours[iso(d)]||0)}));
+  const phase = trainingPhase(CURR().ctl);
+
+  if(!useClaude){
+    state.wizardSource = "rules";
+    state.wizardResult = generateAutoPlan(dayList, CURR().ctl);
+    state.wizardStep = 3;
+    render();
+    return;
+  }
+
+  state.wizardSource = "claude";
+  state.wizardLoading = true; state.wizardError = null; state.wizardStep = 3;
+  render();
+
+  try{
+    const payload = {
+      days: dayList.map(d=>({ key:d.key, hours:d.hours, weather: getWeather(d.key) })),
+      ctl: CURR().ctl, atl: CURR().atl, tsb: CURR().tsb,
+      phaseLabel: phase.label, phaseNote: phase.note,
+    };
+    const res = await fetch(`${API}/generate-plan`, { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(payload) });
+    const data = await res.json();
+    if(data.error) throw new Error(data.error);
+    state.wizardResult = enrichClaudeWorkouts(data.workouts);
+  } catch(e){
+    state.wizardError = "Claude konnte keinen Plan erstellen: " + e.message;
+  }
+  state.wizardLoading = false;
+  render();
+}
+
+// Reichert Claudes Roh-Vorschläge (dateKey/discipline/title/duration/zone/goal)
+// mit den deterministischen Teilen an, die schon für den regelbasierten Planer existieren.
+function enrichClaudeWorkouts(raw){
+  const workouts = (raw||[]).map(w=>{
+    const weather = getWeather(w.dateKey);
+    const full = {
+      id: Date.now()+Math.random(), done:false,
+      dateKey: w.dateKey, discipline: w.discipline, title: w.title,
+      duration: Number(w.duration), zone: w.zone,
+      load: estLoad(Number(w.duration), w.zone), goal: w.goal,
+      weatherNote: weather ? `${weather.high.toFixed(0)}°C, Regenwahrscheinlichkeit ${weather.precip}%` : "Keine Vorhersage verfügbar.",
+    };
+    if(full.discipline==="rad" || full.discipline==="lauf"){
+      const speed = full.discipline==="rad" ? 24 : 7;
+      const km = +(speed*(full.duration/60)).toFixed(1);
+      const route = genRealRoute(km, full.discipline);
+      full.gpx = { km:route.km, elevGain:route.elevGain, points:route.points.length, templateName:route.templateName, laps:route.laps, real:true };
+    }
+    if(full.discipline==="rolle"){
+      full.erg = { warmupMin:12, warmupW:80, reps: full.zone==="z2"?0:4, workMin:3, workW:200, restMin:3, restW:90, cooldownMin:10, cooldownW:70 };
+    }
+    return full;
+  });
+  const totalLoad = workouts.reduce((s,w)=>s+w.load,0);
+  const safeLoad = CURR().ctl*7*1.15;
+  const warning = totalLoad > safeLoad*1.25 ? `Geplante Wochenlast (${totalLoad}) liegt deutlich über einem verträglichen Aufbau-Tempo (~${Math.round(safeLoad)}).` : null;
+  return { workouts, warning, totalLoad, safeLoad:Math.round(safeLoad) };
+}
+
+function wizardApply(){ applyAutoPlan(state.wizardResult.workouts); closeModal(); }
+
+function renderDetailModal(m){
+  const w = m.workout; const disc = DISCIPLINES[w.discipline];
+  return `
+    <div class="row between" style="margin-bottom:4px;">
+      <div class="row" style="gap:8px;"><span class="dot" style="width:10px;height:10px;background:${disc.color};display:inline-block;"></span><h3>${w.title}</h3></div>
+      <button class="close" onclick="closeModal()">×</button>
+    </div>
+    <div class="sub" style="font-family:var(--mono)">${m.dateKey} · ${w.duration} min · ${zoneById(w.zone).label} · Load ${w.load}</div>
+    ${w.goal ? `<div class="goal-box"><div class="h">Ziel dieser Einheit</div><div style="font-size:13px;">${w.goal}</div></div>` : ""}
+    ${w.weatherNote ? `<div class="sub" style="font-family:var(--mono)">${w.weatherNote}</div>` : ""}
+    ${w.notes ? `<p style="font-size:13px;">${w.notes}</p>` : ""}
+    ${w.erg ? `<button class="btn-outline" style="margin-bottom:10px;" onclick='downloadErg(${JSON.stringify(w.id)}, "${m.dateKey}")'>ERG-Datei herunterladen</button>` : ""}
+    ${w.routeLink ? `<div style="font-size:12px; margin-bottom:10px;">Route: <a href="${w.routeLink}" target="_blank" style="color:var(--accent)">${w.routeLink}</a></div>` : ""}
+    ${(w.discipline==="rad"||w.discipline==="lauf") ? `<div class="box">
+        <div class="miniLbl" style="margin-bottom:6px;">GPX-Route</div>
+        ${w.gpx ? `<div style="font-family:var(--mono); font-size:12px; margin-bottom:6px;">
+            ${w.gpx.km.toFixed(1)} km · ${w.gpx.elevGain} Hm · ${w.gpx.points} Punkte
+            ${w.gpx.templateName ? `<div class="sub" style="margin-top:2px;">Rundkurs: ${w.gpx.templateName}${w.gpx.laps>1?` × ${w.gpx.laps}`:""} — reale Wegpunkte auf bekannten Asphalt-Rad-/Wegen, ohne exakte Straßenführung</div>`:""}
+          </div>
+          ${w.gpx.real ? `<button class="btn-outline" onclick='downloadGpx(${JSON.stringify(w.id)}, "${m.dateKey}")'>GPX herunterladen</button>` : ""}`
+        : `<label class="btn-outline" style="display:inline-block;">Eigene GPX hochladen<input type="file" accept=".gpx" style="display:none" onchange='onGpxUpload(event, ${JSON.stringify(w.id)}, "${m.dateKey}")'></label>`}
+      </div>` : ""}
+    <button class="btn-outline" style="margin-bottom:10px;" onclick='pushToIntervals(${JSON.stringify(w.id)}, "${m.dateKey}")'>An intervals.icu-Kalender senden</button>
+    <div class="row" style="gap:8px;">
+      <button class="btn-outline" style="flex:1; background:${w.done?"#fff":"var(--accent)"}; color:${w.done?"var(--ink)":"#fff"};" onclick='toggleDone(${JSON.stringify(w.id)}, "${m.dateKey}")'>${w.done?"Als offen markieren":"Als erledigt markieren"}</button>
+      <button class="btn-outline" style="color:var(--accent2)" onclick='deleteWorkout(${JSON.stringify(w.id)}, "${m.dateKey}")'>Löschen</button>
+    </div>`;
+}
+async function pushToIntervals(id, dateKey){
+  const w = (state.plan[dateKey]||[]).find(x=>x.id===id);
+  if(!w) return;
+  try {
+    const res = await fetch(`${API}/intervals-push-event`, { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(w) });
+    const data = await res.json();
+    if(data.error) throw new Error(data.error);
+    alert("An intervals.icu gesendet.");
+  } catch(e) {
+    alert("Senden fehlgeschlagen: " + e.message);
+  }
+}
+function downloadErg(id, dateKey){
+  const w = (state.plan[dateKey]||[]).find(x=>x.id===id);
+  if(w && w.erg) downloadFile(`${w.title.replace(/\s+/g,"_")}.erg`, buildErg(w.erg), "text/plain");
+}
+function downloadGpx(id, dateKey){
+  const w = (state.plan[dateKey]||[]).find(x=>x.id===id);
+  if(w && w.gpx && w.gpx.real){ const route = genRealRoute(w.gpx.km, w.discipline); downloadFile(`${w.title.replace(/\s+/g,"_")}.gpx`, routeToGpx(route, w.title), "application/gpx+xml"); }
+}
+function onGpxUpload(evt, id, dateKey){
+  const f = evt.target.files[0]; if(!f) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{ const summary = parseGpx(reader.result); if(summary){ updateWorkout(dateKey, id, { gpx: {...summary, real:false} }); render();
+    state.modal = { type:"detail", workout:(state.plan[dateKey]||[]).find(x=>x.id===id), dateKey }; renderModal(); } };
+  reader.readAsText(f);
+}
+function toggleDone(id, dateKey){ const w=(state.plan[dateKey]||[]).find(x=>x.id===id); updateWorkout(dateKey, id, {done: !w.done}); closeModal(); }
+function deleteWorkout(id, dateKey){ removeWorkout(dateKey, id); closeModal(); }
+
+function exportData(){
+  const payload = { plan: state.plan, settings: state.settings, exportedAt: new Date().toISOString() };
+  downloadFile("trainingsplan-export.json", JSON.stringify(payload, null, 2), "application/json");
+}
+function importData(evt){
+  const f = evt.target.files[0]; if(!f) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    try{
+      const data = JSON.parse(reader.result);
+      if(data.plan) state.plan = data.plan;
+      if(data.settings) state.settings = data.settings;
+      persistPlan(); persistSettings(); render();
+      alert("Import erfolgreich — Plan und Einstellungen wurden übernommen.");
+    } catch(e){ alert("Die Datei konnte nicht gelesen werden — ist es die richtige Export-JSON?"); }
+  };
+  reader.readAsText(f);
+  evt.target.value = "";
+}
+
+function syncLabel(){
+  if(state.syncStatus==="loading") return "Synchronisiere …";
+  if(state.syncStatus==="error") return "Sync fehlgeschlagen — erneut versuchen";
+  if(state.syncStatus==="ok") return "Mit intervals.icu synchronisiert ✓";
+  return "Mit intervals.icu synchronisieren";
+}
+
+loadState();
+</script>
+</body>
+</html>

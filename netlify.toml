@@ -1,0 +1,9 @@
+[build]
+  publish = "public"
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
+
+# Alle /.netlify/functions/* Routen sind automatisch verfügbar — kein
+# zusätzliches Redirect-Setup nötig.

@@ -338,6 +338,14 @@
   .mini { background:var(--surface-2); border-radius:14px; padding:10px 12px; }
   .mini .k { font-size:12px; color:var(--sub); font-weight:600; }
   .mini .v { font-size:18px; font-weight:750; margin-top:2px; }
+  .zbar { display:grid; grid-template-columns:28px 1fr auto; gap:8px; align-items:center; font-size:12px; margin-top:6px; }
+  .zbar .zl { font-weight:650; color:var(--sub); }
+  .zbar .zt { height:8px; border-radius:4px; background:var(--surface); overflow:hidden; }
+  .zbar .zt i { display:block; height:100%; border-radius:4px; }
+  .zbar .zv { color:var(--sub); }
+  .int-list { display:flex; flex-direction:column; gap:2px; font-size:13px; }
+  .int-row { display:grid; grid-template-columns:1.2fr 1fr 1fr 1fr; gap:6px; padding:6px 8px; border-radius:8px; background:var(--surface); }
+  .int-row.rec { opacity:.6; }
   .mini .s { font-size:12px; color:var(--sub); margin-top:2px; }
   .note { background:var(--surface-2); border-radius:14px; padding:12px 14px; font-size:14px; line-height:1.5; margin-top:12px; white-space:pre-line; }
   .note .k { font-size:12px; font-weight:700; color:var(--sub); margin-bottom:4px; display:flex; align-items:center; gap:6px; }
@@ -1003,33 +1011,52 @@ function moveWorkout(id, from, to){
 }
 
 /* ================= Geplant vs. absolviert ================= */
+// Sportart einer Aktivität: zuerst über den intervals.icu-Typ, nur ohne Typ über den Namen
+const ACT_TYPES = { Ride:"rad", GravelRide:"rad", MountainBikeRide:"rad", EBikeRide:"rad", EMountainBikeRide:"rad", Velomobile:"rad",
+  VirtualRide:"rolle", TrackRide:"rad", Run:"lauf", TrailRun:"lauf", VirtualRun:"lauf", Walk:"sonstiges", Hike:"sonstiges",
+  Swim:"schwimmen", OpenWaterSwim:"schwimmen", WeightTraining:"kraft", Workout:"kraft", Yoga:"kraft", Pilates:"kraft", Crossfit:"kraft" };
 function actDisc(a){
+  if(a.type && ACT_TYPES[a.type]) return ACT_TYPES[a.type];
   const n = `${a.type||""} ${a.name||""}`.toLowerCase();
-  if(/run|lauf/.test(n)) return "lauf";
+  if(/virtual|indoor|zwift|rolle|trainer|rouvy|wahoo systm/.test(n)) return "rolle";
+  if(/\b(run|running|jog)\b|lauf|läuf|jogg/.test(n)) return "lauf";
   if(/swim|schwimm/.test(n)) return "schwimmen";
-  if(/weight|kraft|strength|workout/.test(n)) return "kraft";
-  if(/virtual|indoor|zwift|rolle|trainer/.test(n)) return "rolle";
+  if(/weight|kraft|strength|mobility|rumpf/.test(n)) return "kraft";
   return "rad";
 }
-// Ordnet jeder geplanten Einheit höchstens eine Aktivität desselben Tages und derselben Sportart zu
+// Ordnet jeder geplanten Einheit höchstens eine Aktivität zu:
+// 1. exakt über die Paarung in intervals.icu (Event-ID des gesendeten Workouts),
+// 2. sonst eine Aktivität desselben Tages und derselben Sportart.
 function buildMatches(){
+  const acts = currentActivities(), used = new Set(), wm = new Map(), aw = new Map(), unplanned = {};
+  const link = (w, k, a) => { wm.set(w.id, a); aw.set(a, { w, k }); used.add(a); };
+  const byEvent = new Map(acts.filter(a=>a.pairedEventId!=null).map(a=>[String(a.pairedEventId), a]));
+  Object.entries(state.plan).forEach(([k,ws])=>ws.forEach(w=>{
+    const a = w.eventId!=null && byEvent.get(String(w.eventId));
+    if(a && !used.has(a)) link(w, k, a);
+  }));
   const byDate = {};
-  currentActivities().forEach(a=>{ (byDate[a.date] = byDate[a.date] || []).push(a); });
-  const wm = new Map(), unplanned = {};
+  acts.forEach(a=>{ if(!used.has(a)) (byDate[a.date] = byDate[a.date] || []).push(a); });
   new Set([...Object.keys(byDate), ...Object.keys(state.plan)]).forEach(k=>{
-    const acts = [...(byDate[k]||[])];
+    const free = [...(byDate[k]||[])];
     (state.plan[k]||[]).forEach(w=>{
+      if(wm.has(w.id)) return;
       const g = discGroup(w.discipline); let bi=-1, bd=Infinity;
-      acts.forEach((a,i)=>{ if(discGroup(actDisc(a))!==g) return; const diff=Math.abs(a.min-(w.duration||0)); if(diff<bd){ bd=diff; bi=i; } });
-      if(bi>=0){ wm.set(w.id, acts[bi]); acts.splice(bi,1); }
+      free.forEach((a,i)=>{ if(a.pairedEventId!=null && a.pairedEventId!==w.eventId) return; // gehört zu einem anderen Event
+        if(discGroup(actDisc(a))!==g) return; const diff=Math.abs(a.min-(w.duration||0)); if(diff<bd){ bd=diff; bi=i; } });
+      if(bi>=0){ link(w, k, free[bi]); free.splice(bi,1); }
     });
-    if(acts.length) unplanned[k] = acts;
+    if(free.length) unplanned[k] = free;
   });
-  return { wm, unplanned };
+  return { wm, aw, unplanned };
 }
+// Dauer einer Aktivität — bei Strava-Stubs (keine Daten über die API) die geplante Dauer als Näherung
+const actMin = (a) => a.min || (a.stub && MATCH.aw && MATCH.aw.get(a) ? Number(MATCH.aw.get(a).w.duration)||0 : 0);
+const actName = (a) => a.stub && MATCH.aw && MATCH.aw.get(a) ? MATCH.aw.get(a).w.title : a.name;
 const isDone = (w) => !!(w.done || MATCH.wm.has(w.id));
 function workoutStatus(w, key){
   const a = MATCH.wm.get(w.id);
+  if(a && !a.min) return { kind:"matched", a, pct:null, color:"var(--good)", text:"Erledigt · in intervals.icu verknüpft" };
   if(a){
     const pct = Math.round(a.min / Math.max(1, w.duration) * 100);
     const color = pct>=80 && pct<=120 ? "var(--good)" : pct>=50 && pct<=150 ? "var(--sst)" : "var(--thr)";
@@ -1045,8 +1072,9 @@ function weekStats(days){
   days.forEach(d=>{ const k=iso(d); (state.plan[k]||[]).forEach(w=>{
     const m = Number(w.duration)||0, a = MATCH.wm.get(w.id), done = w.done || !!a;
     s.min+=m; s.load+=Number(w.load)||0; s.n++;
-    if(done){ s.done++; s.doneMin += a ? a.min : m; }
-    if(k<tk || (k===tk && done)){ s.dueMin+=m; s.credit += Math.min(a ? a.min : (w.done ? m : 0), m*1.2); if(!done) s.missed++; }
+    const am = a ? (a.min || m) : null; // Stub ohne Dauer → als planmäßig absolviert werten
+    if(done){ s.done++; s.doneMin += a ? am : m; }
+    if(k<tk || (k===tk && done)){ s.dueMin+=m; s.credit += Math.min(a ? am : (w.done ? m : 0), m*1.2); if(!done) s.missed++; }
     s.band[zoneById(w.zone).band]+=m;
     s.disc[w.discipline]=(s.disc[w.discipline]||0)+m;
     if(w.rpe) s.rpe.push(w.rpe);
@@ -1068,7 +1096,7 @@ function weeklyVolume(weeks=8){
     const byDisc = {}; let min=0;
     currentActivities().forEach(a=>{
       const d = fromKey(a.date);
-      if(d>=ws && d<we){ const k=actDisc(a); byDisc[k]=(byDisc[k]||0)+a.min; min+=a.min; }
+      if(d>=ws && d<we){ const k=actDisc(a), am=actMin(a); byDisc[k]=(byDisc[k]||0)+am; min+=am; }
     });
     return { ws, min, byDisc, current:i===weeks-1 };
   });
@@ -1519,7 +1547,7 @@ function viewToday(){
             <button class="link" onclick="openAdd('${tk}')">${icon("plus",16,2.2)}Workout</button></div>
           ${todays.length ? todays.map(w=>todayWorkout(w,tk,wx)).join("") :
             `<div class="empty"><span class="tile lg">${icon("moon",22)}</span><div><b>Ruhetag</b><p>Nichts geplant — Regeneration ist Teil des Trainings.</p></div></div>`}
-          ${unpl.map(a=>`<div class="unplanned" style="margin-top:12px">${icon(discOf(actDisc(a)).icon,14)}Ungeplant absolviert: ${esc(a.name)} · ${fmtDur(a.min)}</div>`).join("")}
+          ${unpl.map(a=>`<div class="unplanned" style="margin-top:12px">${icon(discOf(actDisc(a)).icon,14)}Ungeplant absolviert: ${esc(a.name)}${a.min ? ` · ${fmtDur(a.min)}` : ""}</div>`).join("")}
         </section>
         <section class="card">
           <div class="card-head"><h2>Diese Woche</h2><button class="link" onclick="gotoThisWeek()">Zum Plan${icon("chevR",16,2.2)}</button></div>
@@ -1634,14 +1662,14 @@ function weekStrip(days){
     </button>`; }).join("")}</div>`;
 }
 function activityRow(a){
-  const d=discOf(actDisc(a)), planned=[...MATCH.wm.values()].includes(a);
-  return `<div class="row-item">
+  const d=discOf(actDisc(a)), link=MATCH.aw && MATCH.aw.get(a), idx=currentActivities().indexOf(a);
+  return `<button class="row-item" onclick="openActivity(${idx})">
     <span class="tile" style="background:${d.color}">${icon(d.icon,18)}</span>
-    <span class="ri-main"><div class="ri-title">${esc(a.name)}</div>
-      <div class="ri-meta"><span>${relDate(a.date)}</span><span>${fmtDur(a.min)}</span>${a.elev?`<span>${a.elev} Hm</span>`:""}${a.hr?`<span>♥ ${Math.round(a.hr)}</span>`:""}${a.watts?`<span>${Math.round(a.watts)} W</span>`:""}
-      ${planned?`<span style="color:var(--good); font-weight:650">✓ Plan</span>`:""}</div></span>
-    <span class="ri-side"><b class="num">${fmtNum(a.km)} km</b>${a.load!=null?`${a.load} TSS`:""}</span>
-  </div>`;
+    <span class="ri-main"><div class="ri-title">${esc(actName(a))}</div>
+      <div class="ri-meta"><span>${relDate(a.date)}</span>${a.min ? `<span>${fmtDur(a.min)}</span>` : a.stub ? `<span>Strava · Details nicht per API</span>` : ""}${a.elev?`<span>${a.elev} Hm</span>`:""}${a.hr?`<span>♥ ${Math.round(a.hr)}</span>`:""}${a.watts?`<span>${Math.round(a.watts)} W</span>`:""}
+      ${link?`<span style="color:var(--good); font-weight:650">✓ Plan</span>`:""}</div></span>
+    <span class="ri-side">${a.km ? `<b class="num">${fmtNum(a.km)} km</b>` : link && a.stub ? `<b class="num">${fmtDur(link.w.duration)}</b>` : ""}${a.load!=null?`${a.load} TSS`:""}</span>
+  </button>`;
 }
 
 /* ================= View: Plan ================= */
@@ -1709,7 +1737,7 @@ function dayCard(d){
             ${st.kind==="matched"||st.kind==="missed" ? `<div class="wk-actual" style="color:${st.color}">${icon(st.kind==="missed"?"x":"check",12,2.6)}${st.text}</div>` : ""}</span>
           <span class="check ${st.kind==="matched"?"auto":done?"on":""}" role="checkbox" aria-checked="${done}" title="${st.kind==="matched"?"Automatisch aus intervals.icu erkannt":"Als erledigt markieren"}" onclick="quickToggle(event, ${wk.id}, '${key}')">${icon("check",15,2.6)}</span>
         </button>`; }).join("")}
-      ${unpl.map(a=>`<div class="unplanned">${icon(discOf(actDisc(a)).icon,14)}<span>Ungeplant: ${esc(a.name)} · ${fmtDur(a.min)}</span></div>`).join("")}
+      ${unpl.map(a=>`<div class="unplanned">${icon(discOf(actDisc(a)).icon,14)}<span>Ungeplant: ${esc(a.name)}${a.min ? ` · ${fmtDur(a.min)}` : ""}</span></div>`).join("")}
       ${!list.length && !unpl.length ? `<div class="rest">Ruhetag</div>` : ""}
       <button class="add-slot" onclick="openAdd('${key}')">${icon("plus",15,2.2)}Hinzufügen</button>
     </div>
@@ -1973,6 +2001,7 @@ function modalContent(){
   if(m.type==="add") return renderAddModal(m);
   if(m.type==="wizard") return renderWizardModal();
   if(m.type==="detail") return renderDetailModal(m);
+  if(m.type==="activity") return renderActivityModal(m);
   if(m.type==="feedback") return renderFeedbackModal(m);
   if(m.type==="checkin") return renderCheckinModal(m);
   return "";
@@ -2411,7 +2440,10 @@ function renderDetailModal(m){
       <div class="mini"><div class="k">Last</div><div class="v num">${w.load??"–"} <small style="font-size:12px;color:var(--sub)">TSS</small></div></div>
       ${w.gpx ? `<div class="mini"><div class="k">Distanz</div><div class="v num">${fmtNum(w.gpx.km)} km</div></div>` : ""}
     </div>
-    ${st.kind==="matched" ? `<div class="note"><div class="k" style="color:${st.color}">${icon("check",14,2.4)}Aus intervals.icu erkannt</div>${esc(st.a.name)} · ${fmtDur(st.a.min)}${st.a.km?` · ${fmtNum(st.a.km)} km`:""}${st.a.load!=null?` · ${st.a.load} TSS`:""} — ${st.pct} % der geplanten Dauer</div>` : ""}
+    ${st.kind==="matched" ? `<div class="note"><div class="k" style="color:${st.color}">${icon("check",14,2.4)}${st.a.pairedEventId!=null && st.a.pairedEventId===w.eventId ? "In intervals.icu verknüpft" : "Aus intervals.icu erkannt"}
+      <button class="link" style="margin-left:auto; font-size:13px; padding:0" onclick="openActivity(${currentActivities().indexOf(st.a)})">Aktivität ansehen${icon("chevR",14,2.2)}</button></div>${st.a.min
+        ? `${esc(st.a.name)} · ${fmtDur(st.a.min)}${st.a.km?` · ${fmtNum(st.a.km)} km`:""}${st.a.load!=null?` · ${st.a.load} TSS`:""} — ${st.pct} % der geplanten Dauer`
+        : "Die Aktivität kommt über Strava — intervals.icu darf deren Details nicht per API weitergeben. Dauer und Last werden deshalb aus dem Plan übernommen."}</div>` : ""}
     ${done ? (w.rpe ? `<div class="note"><div class="k">${icon("heart",14,2.2)}Dein Feedback <button class="link" style="margin-left:auto; font-size:13px; padding:0" onclick="openFeedback(${w.id}, '${m.dateKey}')">Bearbeiten</button></div>RPE ${w.rpe} (${RPE_LABELS[w.rpe]})${w.feel ? ` · ${FEEL[w.feel-1][0]} ${FEEL[w.feel-1][1]}` : ""}${w.feedback ? `\n„${esc(w.feedback)}“` : ""}</div>`
       : `<button class="btn secondary sm" style="margin-top:12px" onclick="openFeedback(${w.id}, '${m.dateKey}')">${icon("heart",16)}Feedback geben</button>`) : ""}
     ${w.discipline==="rad" && wx && !isOutdoorFriendly(wx) && !done ? `<div class="hint" style="--hc:var(--info)">${icon(wxIcon(wx),18)}<div>${wx.precip} % Regenwahrscheinlichkeit, ${Math.round(wx.high)}° — lieber drinnen?<br>
@@ -2441,6 +2473,90 @@ function renderDetailModal(m){
     </div>
     <div class="sheet-foot">${st.kind==="matched" ? `<button class="btn block secondary" onclick="closeModal()">Schließen</button>`
       : `<button class="btn block ${w.done?"secondary":"good"}" onclick="toggleDone(${w.id}, '${m.dateKey}')">${icon(w.done?"x":"check",18,2.4)}${w.done?"Als offen markieren":"Als erledigt markieren"}</button>`}</div>`;
+}
+/* ---------- Aktivität: Detailseite ---------- */
+const ACT_DETAIL = {}; // Cache für Intervalle je Aktivität (lazy geladen)
+function openActivity(idx){
+  const a = currentActivities()[idx]; if(!a) return;
+  state.modal = { type:"activity", idx };
+  renderModal();
+  if(a.id!=null && !a.stub && ACTIVITIES_LIVE && !ACT_DETAIL[a.id]){
+    ACT_DETAIL[a.id] = { loading:true };
+    fetchJSON(`${API}/intervals-activity?id=${encodeURIComponent(a.id)}`)
+      .then(d=>{ ACT_DETAIL[a.id] = d; })
+      .catch(()=>{ ACT_DETAIL[a.id] = { intervals:[] }; })
+      .finally(()=>{ if(state.modal && state.modal.type==="activity") renderModal(); });
+  }
+}
+const ZONE_COLORS = ["var(--z1)","var(--z2)","var(--z3)","var(--sst)","var(--thr)","var(--vo2)","var(--ana)"];
+function zoneBars(times, label){
+  const tot = (times||[]).reduce((s,v)=>s+(v||0),0); if(!tot) return "";
+  return `<div class="panel"><div class="panel-title">${label} <span>${fmtDur(tot/60)}</span></div>
+    ${times.map((v,i)=>{ const pct=v/tot*100; return v ? `<div class="zbar"><span class="zl">Z${i+1}</span>
+      <span class="zt"><i style="width:${Math.max(1,pct).toFixed(1)}%; background:${ZONE_COLORS[Math.min(i, ZONE_COLORS.length-1)]}"></i></span>
+      <span class="zv num">${fmtDur(v/60)} · ${Math.round(pct)} %</span></div>` : ""; }).join("")}</div>`;
+}
+function renderActivityModal(m){
+  const a = currentActivities()[m.idx];
+  if(!a) return sheetHead("Aktivität nicht gefunden");
+  const d = discOf(actDisc(a)), link = MATCH.aw && MATCH.aw.get(a), w = link && link.w;
+  const run = discGroup(actDisc(a))==="run";
+  const time = a.start && a.start.length>10 ? a.start.slice(11,16) : null;
+  const tile = (k, v, unit="") => v==null || v==="" ? "" : `<div class="mini"><div class="k">${k}</div><div class="v num">${v}${unit?` <small style="font-size:12px;color:var(--sub)">${unit}</small>`:""}</div></div>`;
+  const pace = a.speed ? (run ? (()=>{ const s=1000/a.speed; return `${Math.floor(s/60)}:${pad2(Math.round(s%60))}`; })() : fmtNum(a.speed*3.6)) : null;
+  const wr = wellnessRows().find(r=>r.day===a.date);
+  const det = a.id!=null ? ACT_DETAIL[a.id] : null;
+  const ints = det && det.intervals ? det.intervals.filter(i=>i.secs) : [];
+  const pct = w && a.min ? Math.round(a.min/Math.max(1,w.duration)*100) : null;
+  return `
+    <div class="detail-hero" style="--dc:${d.color}">
+      <div class="sheet-head">
+        <span class="tile lg" style="background:${d.color}">${icon(d.icon,24)}</span>
+        <button class="close" onclick="closeModal()" aria-label="Schließen">${icon("x",18,2.2)}</button>
+      </div>
+      <h3 style="font-size:24px; font-weight:750; letter-spacing:-.02em; margin-top:12px">${esc(actName(a))}</h3>
+      <div class="sheet-sub">${fmtDay(a.date)}${time ? ` · ${time} Uhr` : ""} · ${d.label}${a.device ? ` · ${esc(a.device)}` : a.source ? ` · ${esc(a.source)}` : ""}</div>
+    </div>
+    ${a.stub ? `<div class="hint" style="--hc:var(--info)">${icon("link",18)}<div>Diese Aktivität kommt über <b>Strava</b>. intervals.icu darf Strava-Daten laut deren Nutzungsbedingungen nicht per API weitergeben — das Dashboard sieht nur, dass es sie gibt.
+      ${w ? " Dauer und Last werden deshalb aus dem geplanten Workout übernommen." : ""}<br><span class="muted" style="font-size:13px">Abhilfe: Garmin, Wahoo, Zwift o. Ä. direkt in intervals.icu verbinden (Einstellungen → Verbindungen), dann kommen alle Werte an.</span></div></div>` : ""}
+    <div class="tiles">
+      ${tile("Dauer", a.min ? fmtDur(a.min) : w ? `≈ ${fmtDur(w.duration)}` : "–")}
+      ${a.elapsedMin && a.elapsedMin-a.min>=5 ? tile("Gesamtzeit", fmtDur(a.elapsedMin)) : ""}
+      ${a.km ? tile("Distanz", fmtNum(a.km), "km") : ""}
+      ${a.elev ? tile("Höhenmeter", a.elev, "Hm") : ""}
+      ${tile("Last", a.load!=null ? Math.round(a.load) : a.stub && wr && wr.dayLoad!=null ? `≈ ${Math.round(wr.dayLoad)}` : null, "TSS")}
+      ${a.intensity!=null ? tile("Intensität", `${Math.round(a.intensity)} %`) : ""}
+      ${a.hr ? tile("Ø Herzfrequenz", Math.round(a.hr), a.maxHr ? `max ${Math.round(a.maxHr)}` : "bpm") : ""}
+      ${a.watts ? tile("Ø Leistung", Math.round(a.watts), "W") : ""}
+      ${a.np ? tile("NP", Math.round(a.np), "W") : ""}
+      ${pace ? tile(run ? "Ø Pace" : "Ø Tempo", pace, run ? "/km" : "km/h") : ""}
+      ${a.cadence ? tile("Ø Kadenz", Math.round(a.cadence), run ? "spm" : "rpm") : ""}
+      ${a.calories ? tile("Kalorien", Math.round(a.calories), "kcal") : ""}
+      ${a.decoupling!=null ? tile("Entkopplung", fmtNum(a.decoupling), "%") : ""}
+      ${a.ef!=null ? tile("Effizienz (EF)", fmtNum(a.ef, 2)) : ""}
+      ${a.rpe ? tile("RPE", a.rpe, "/10") : ""}
+    </div>
+    ${w ? `<div class="panel"><div class="panel-title">${icon("calendar",14,2.2)} Geplant: ${esc(w.title)} <span>${fmtShort(link.k)}</span></div>
+      <div class="tiles" style="margin-top:0">
+        <div class="mini" style="background:var(--surface)"><div class="k">Dauer geplant</div><div class="v num">${fmtDur(w.duration)}</div></div>
+        <div class="mini" style="background:var(--surface)"><div class="k">Erfüllt</div><div class="v num" style="color:${pct==null ? "var(--good)" : pct>=80 && pct<=120 ? "var(--good)" : "var(--sst)"}">${pct!=null ? `${pct} %` : "✓"}</div></div>
+        <div class="mini" style="background:var(--surface)"><div class="k">Zone</div><div class="v">${zchip(w.zone)}</div></div>
+        <div class="mini" style="background:var(--surface)"><div class="k">Last geplant / ist</div><div class="v num">${w.load??"–"} / ${a.load!=null ? Math.round(a.load) : a.stub && wr && wr.dayLoad!=null ? `≈ ${Math.round(wr.dayLoad)}` : "–"}</div></div>
+      </div>
+      <p class="muted" style="font-size:12px; margin-top:8px">${a.pairedEventId!=null && a.pairedEventId===w.eventId ? "In intervals.icu mit dem Kalender-Event verknüpft." : "Automatisch über Tag und Sportart zugeordnet."}</p>
+      <button class="btn secondary sm" style="margin-top:10px; background:var(--surface)" onclick="openDetail(${w.id}, '${link.k}')">Geplantes Workout öffnen${icon("chevR",16,2.2)}</button></div>`
+      : `<div class="note"><div class="k">${icon("calendar",14,2.2)}Ungeplant</div>Zu dieser Aktivität gibt es keine geplante Einheit.</div>`}
+    ${zoneBars(a.zoneTimes, "Zeit in Leistungszonen")}
+    ${zoneBars(a.hrZoneTimes, "Zeit in Herzfrequenzzonen")}
+    ${det && det.loading ? `<p class="muted" style="margin-top:12px; font-size:13px">Intervalle werden geladen …</p>` : ""}
+    ${ints.length > 1 ? `<div class="panel"><div class="panel-title">Intervalle <span>${ints.length}</span></div>
+      <div class="int-list">${(()=>{ let n=0; return ints.map(i=>{ const rec=i.type==="RECOVERY"; if(!rec) n++; return `<div class="int-row ${rec?"rec":""}"><span class="num">${esc(i.label || (rec ? "Pause" : `#${n}`))}</span>
+        <span class="num">${fmtSecs(i.secs)}</span><span class="num">${i.watts ? `${Math.round(i.watts)} W` : i.km ? `${fmtNum(i.km,2)} km` : ""}</span><span class="num">${i.hr ? `♥ ${Math.round(i.hr)}` : ""}</span></div>`; }).join(""); })()}</div></div>` : ""}
+    ${a.description ? `<div class="note"><div class="k">Beschreibung</div>${esc(a.description)}</div>` : ""}
+    <div class="action-list">
+      ${a.id!=null && ACTIVITIES_LIVE ? `<a class="btn secondary" href="https://intervals.icu/activities/${encodeURIComponent(a.id)}" target="_blank" rel="noopener">${icon("link",18)}In intervals.icu öffnen</a>` : ""}
+    </div>
+    <div class="sheet-foot"><button class="btn block secondary" onclick="closeModal()">Schließen</button></div>`;
 }
 function moveFromDetail(id, key){
   const to = document.getElementById("mv-date").value;
@@ -2523,7 +2639,7 @@ async function generateReview(wk){
       days: days.map(d=>{ const k=iso(d); return {
         date: k,
         planned: (state.plan[k]||[]).map(w=>({ title:w.title, discipline:w.discipline, zone:w.zone, duration:w.duration, done:isDone(w),
-          actualMin:(MATCH.wm.get(w.id)||{}).min ?? null, rpe:w.rpe||null, feel:w.feel||null, feedback:w.feedback||"" })),
+          actualMin:(MATCH.wm.get(w.id)||{}).min || null, rpe:w.rpe||null, feel:w.feel||null, feedback:w.feedback||"" })),
         unplanned: (MATCH.unplanned[k]||[]).map(a=>({ name:a.name, min:a.min, km:a.km, load:a.load })),
         checkin: (state.journal.checkins||{})[k] || null,
         wellness: (()=>{ const w=wellnessRows().find(r=>r.day===k); return w && hasRecoveryData(w) ? { sleepH:sleepH(w) ? +sleepH(w).toFixed(1) : null,

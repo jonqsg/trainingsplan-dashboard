@@ -7,8 +7,11 @@
 //
 // Achtung Strava: Aktivitäten, die über Strava nach intervals.icu kommen, gibt die API
 // wegen der Strava-Nutzungsbedingungen nur als Stub zurück (ohne Dauer, Distanz, Name …).
-// Die werden als stub:true markiert, damit das Dashboard nicht "0 min" anzeigt.
+// Die werden als stub:true markiert, damit das Dashboard nicht "0 min" anzeigt — und, wenn
+// Strava verbunden ist (siehe strava-auth.js), direkt mit den Daten von Strava ergänzt.
 const { intervalsFetch, athleteId, daysAgo, isoDate } = require("./lib/intervalsClient");
+const { planStore } = require("./lib/blobStore");
+const strava = require("./lib/strava");
 
 exports.handler = async (event) => {
   try {
@@ -27,8 +30,10 @@ exports.handler = async (event) => {
       if (e && e.paired_activity_id != null) eventByActivity[String(e.paired_activity_id)] = e;
     });
 
-    const mapped = (Array.isArray(data) ? data : []).map((a) => mapActivity(a, eventByActivity[String(a.id)]))
-      .sort((x, y) => (x.start < y.start ? 1 : -1));
+    const raw = Array.isArray(data) ? data : [];
+    let mapped = raw.map((a) => mapActivity(a, eventByActivity[String(a.id)]));
+    mapped = await enrichFromStrava(event, mapped, raw, Number(q.ftp) || null);
+    mapped.sort((x, y) => (x.start < y.start ? 1 : -1));
 
     return { statusCode: 200, headers: cors(), body: JSON.stringify(mapped) };
   } catch (e) {
@@ -78,6 +83,66 @@ function mapActivity(a, ev) {
     device: a.device_name || null,
     description: a.description || null,
     planned: ev ? { name: ev.name || null, min: mins(num(ev.moving_time)), load: num(ev.icu_training_load) } : null,
+  };
+}
+
+// Ersetzt Strava-Stubs durch die echten Werte aus der Strava-API (falls verbunden).
+// Fehler hier dürfen den Sync nie verhindern — dann bleibt es beim Stub.
+async function enrichFromStrava(event, mapped, raw, ftp) {
+  const stubs = mapped.filter((a) => a.stub && a.date);
+  if (!stubs.length || !strava.configured()) return mapped;
+  try {
+    const store = planStore(event);
+    const days = stubs.map((a) => a.date).sort();
+    const list = await strava.stravaActivities(store, days[0], days[days.length - 1]);
+    if (!list) return mapped;
+    const used = new Set();
+    return mapped.map((a, i) => {
+      if (!a.stub) return a;
+      const s = findStrava(a, raw[i], list, used);
+      if (!s) return a;
+      used.add(s.id);
+      return mergeStrava(a, s, ftp);
+    });
+  } catch (e) {
+    console.warn("Strava-Anreicherung fehlgeschlagen:", e.message);
+    return mapped;
+  }
+}
+
+const stravaIdOf = (r) => r && (r.strava_id ?? r.external_id ?? null);
+function findStrava(a, r, list, used) {
+  const free = list.filter((s) => !used.has(s.id));
+  const sid = stravaIdOf(r);
+  if (sid != null) { const hit = free.find((s) => String(s.id) === String(sid)); if (hit) return hit; }
+  // Startzeit (lokal) auf ±5 Minuten
+  const t = Date.parse(`${a.start}Z`);
+  if (!isNaN(t)) {
+    const hit = free.map((s) => [s, Math.abs(Date.parse(`${s.start}Z`) - t)]).filter(([, d]) => d <= 5 * 60 * 1000).sort((x, y) => x[1] - y[1])[0];
+    if (hit) return hit[0];
+  }
+  // Notlösung: einzige Strava-Aktivität desselben Tages
+  const sameDay = free.filter((s) => s.start.slice(0, 10) === a.date);
+  return sameDay.length === 1 ? sameDay[0] : null;
+}
+
+function mergeStrava(a, s, ftp) {
+  const secs = s.moving_time || s.elapsed_time || 0;
+  const power = s.deviceWatts ? (s.np || s.watts) : null;
+  // TSS-Schätzung aus Leistung und FTP (Strava selbst liefert keine Trainingslast)
+  const load = power && ftp && secs ? Math.round((secs / 3600) * Math.pow(power / ftp, 2) * 100) : null;
+  return {
+    ...a,
+    stub: false, viaStrava: true, stravaId: s.id,
+    name: s.name || a.name, type: a.type || s.type,
+    km: s.distance ? +(s.distance / 1000).toFixed(1) : 0,
+    min: mins(secs), elapsedMin: mins(s.elapsed_time),
+    elev: Math.round(s.elev || 0),
+    hr: num(s.hr), maxHr: num(s.maxHr), watts: s.deviceWatts ? num(s.watts) : null, np: s.deviceWatts ? num(s.np) : null,
+    speed: num(s.speed), cadence: num(s.cadence), calories: s.kj ? Math.round(s.kj) : null, // kJ ≈ kcal beim Radfahren
+    load: load ?? a.load, loadEstimated: load != null,
+    intensity: power && ftp ? Math.round((power / ftp) * 100) : a.intensity,
+    device: s.device || a.device,
   };
 }
 

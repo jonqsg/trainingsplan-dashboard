@@ -18,13 +18,15 @@ exports.handler = async (event) => {
   }
 };
 
-function buildPrompt({ days, ctl, atl, tsb, phaseLabel, phaseNote, season, readiness, feedback, lastWeek }) {
+function buildPrompt({ days, ctl, atl, tsb, phaseLabel, phaseNote, season, readiness, recovery, feedback, lastWeek }) {
   const goal = season && season.date
     ? `Saisonziel: ${season.name || "Triathlon"}${season.type ? ` (${season.type})` : ""} am ${season.date} — noch ${season.weeks} Wochen, aktuelle Saisonphase "${season.phase}".`
     : "Ziel: Triathlon Frühjahr/Sommer 2027.";
 
   const context = [];
-  if (readiness) context.push(`Tagesform heute: ${readiness.score}/100 (${readiness.level}).`);
+  if (readiness) context.push(`Tagesform heute: ${readiness.score}/100 (${readiness.level})${readiness.factors && readiness.factors.length ? ` — ${readiness.factors.join(", ")}` : ""}.`);
+  const rec = recoveryText(recovery);
+  if (rec) context.push(rec);
   if (feedback && feedback.count) {
     context.push(`Rückmeldungen der letzten 14 Tage: ${feedback.count} Einheiten mit RPE, im Schnitt ${feedback.avgDelta > 0 ? "+" : ""}${feedback.avgDelta} RPE-Punkte gegenüber dem für die Zone Erwarteten.`);
     if (feedback.notes && feedback.notes.length) context.push(`Notizen des Athleten: ${feedback.notes.map((n) => `"${n}"`).join("; ")}`);
@@ -51,10 +53,27 @@ Regeln:
 - Lauf-Einheiten konservativ als Run/Walk planen, wegen fehlender Laufbasis
 - Wochenlast insgesamt an CTL ${ctl} orientiert verträglich halten, kein zu aggressiver Sprung
 - Fühlten sich die letzten Einheiten härter an als geplant oder ist die Tagesform schlecht: Umfang/Intensität zurücknehmen
+- Schlaf und Energie sind die wichtigsten Erholungsmarker: Bei Schlafdefizit (≥ 3 h in 7 Tagen oder Ø deutlich unter Bedarf) oder Energie klar unter dem Normalwert höchstens EINE intensive Einheit (sst/thr/vo2/ana) und Umfang um 10–20 % senken; bei deutlichem Defizit (Erholung "Erholung nötig") gar keine intensive Einheit
+- Die ersten 1–2 Tage der Woche an die aktuelle Tagesform/Energie anpassen — keine harte Einheit, wenn Tagesform oder Energie heute niedrig sind; harte Einheiten eher auf spätere Tage legen und nie zwei harte Tage hintereinander
+- Sind Schlaf und Energie gut und stabil, darf die Woche normal nach Phase geplant werden
+- Wenn Schlaf/Energie eine Einheit beeinflusst haben, das im "goal" kurz erwähnen
 - Nicht jeden verfügbaren Tag zwingend verplanen — Regenerationstage sind Teil eines guten Plans
 
 Antworte AUSSCHLIESSLICH mit einem JSON-Array, keine Erklärung, kein Markdown, keine Code-Fences. Jedes Element exakt so:
 {"dateKey":"YYYY-MM-DD","discipline":"rad|rolle|lauf|kraft|schwimmen","title":"kurzer Titel","duration":Minuten_als_Zahl,"zone":"z1|z2|z3|sst|thr|vo2|ana","goal":"1-2 Sätze physiologische Begründung, warum genau diese Einheit an diesem Tag sinnvoll ist"}`;
+}
+
+function recoveryText(r) {
+  if (!r) return null;
+  const lines = ["Erholung der letzten 7 Tage (Schlaf/Energie aus intervals.icu):"];
+  if (r.sleepAvgH != null) lines.push(`- Schlaf Ø ${r.sleepAvgH} h bei ${r.sleepNeedH} h Bedarf (${r.nights} Nächte erfasst)${r.sleepDebtH ? `, kumuliertes Schlafdefizit ${r.sleepDebtH} h` : ""}${r.sleepBaseH != null ? `; Normalwert der Wochen davor ${r.sleepBaseH} h` : ""}.`);
+  if (r.sleepScoreAvg != null) lines.push(`- Schlafscore Ø ${r.sleepScoreAvg}/100.`);
+  if (r.lastNight) lines.push(`- Letzte Nacht: ${r.lastNight.hours != null ? `${r.lastNight.hours} h` : "Dauer unbekannt"}${r.lastNight.score != null ? `, Score ${r.lastNight.score}` : ""}.`);
+  if (r.energyAvgPct != null) lines.push(`- Energie Ø ${r.energyAvgPct} % (0–100)${r.energyBasePct != null ? `, Normalwert ${r.energyBasePct} %` : ""}${r.energyTodayPct != null ? `, heute ${r.energyTodayPct} %` : ""}.`);
+  if (r.energyAfterHardDay && Math.abs(r.energyAfterHardDay.delta) >= 5) lines.push(`- Nach harten Tagen (≥ ${r.energyAfterHardDay.hardMin} TSS) liegt die Energie am Folgetag im Schnitt ${r.energyAfterHardDay.delta} %-Punkte ${r.energyAfterHardDay.delta < 0 ? "niedriger" : "höher"}.`);
+  if (r.score != null) lines.push(`- Erholungs-Score gesamt: ${r.score}/100 (${r.level}).`);
+  if (Array.isArray(r.series) && r.series.length) lines.push(`- Verlauf: ${r.series.map((d) => `${d.day.slice(5)}: ${d.sleepH != null ? `${d.sleepH} h` : "–"}${d.energy != null ? `/${d.energy} %` : ""}`).join("; ")}`);
+  return lines.length > 1 ? lines.join("\n") : null;
 }
 
 function cors() {

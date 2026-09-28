@@ -5,10 +5,10 @@ mit Netlify Functions als Backend, Netlify Blobs als Speicher und optionaler int
 
 ## Funktionen
 
-- **Heute**: Form-Anzeige (TSB), Tagesform-Score aus HRV, Ruhepuls, Schlaf und Check-in, Einheit des Tages mit Wetter-Hinweis
+- **Heute**: Form-Anzeige (TSB), Tagesform-Score aus HRV, Ruhepuls, Schlaf, Energie und Check-in, Karte „Schlaf & Energie“ (letzte Nacht, Energie heute, 7-Tage-Schlafdefizit, 14-Tage-Verlauf), Einheit des Tages mit Wetter-Hinweis
 - **Plan**: Wochenplaner mit Workout-Bibliothek (Drag & Drop), Abgleich geplant vs. absolviert, Erfüllungsquote, Wochenrückblick von Claude
-- **Auto-Plan**: regelbasiert oder mit Claude — berücksichtigt Saisonphase, Tagesform, RPE-Feedback und die 16-Tage-Wettervorhersage
-- **Fortschritt**: Fitness/Ermüdung/Form mit Prognose, Saisonplanung mit Form-Prognose für den Renntag, Leistungskurve, FTP-Verlauf
+- **Auto-Plan**: regelbasiert oder mit Claude — berücksichtigt Saisonphase, Tagesform, Schlaf & Energie der letzten 7 Tage (Umfang runter / keine harten Intervalle bei Erholungsdefizit), RPE-Feedback und die 16-Tage-Wettervorhersage
+- **Fortschritt**: Fitness/Ermüdung/Form mit Prognose, Schlaf- & Energieverlauf (inkl. Energie nach harten Tagen), Saisonplanung mit Form-Prognose für den Renntag, Leistungskurve, FTP-Verlauf
 - **intervals.icu**: Workouts als strukturierte Workouts senden (→ Garmin/Wahoo/Zwift), optional automatisch
 - **Offline-fähige PWA** mit täglicher Push-Erinnerung
 
@@ -22,7 +22,7 @@ netlify/functions/
   plan.js                  → GET/POST Wochenplan (Netlify Blobs)
   settings.js              → GET/POST Einstellungen: FTP, HFmax, Saisonziel, Standort …
   store.js                 → GET/POST ?key=library|journal (Vorlagen, Check-ins, Rückblicke)
-  intervals-fitness.js     → Proxy: CTL/ATL/TSB + Wellness (HRV, Ruhepuls, Schlaf) von intervals.icu
+  intervals-fitness.js     → Proxy: CTL/ATL/TSB + Wellness (HRV, Ruhepuls, Schlaf, Schlafscore, Energie/Body Battery) von intervals.icu
   intervals-activities.js  → Proxy: Aktivitäten inkl. Leistung und eFTP
   intervals-power-curve.js → Proxy: Leistungskurve (Bestwerte je Dauer)
   intervals-push-event.js  → Workout als (strukturiertes) Kalender-Event anlegen/aktualisieren/löschen
@@ -128,3 +128,10 @@ echten Key als Passwort — das ist die von der intervals.icu-Community am häuf
 Methode. Falls sich das API-Verhalten ändert, prüfe die aktuelle Doku unter
 https://intervals.icu/features/open-api/ bzw. https://forum.intervals.icu und passe
 `authHeader()` entsprechend an.
+
+## Schlaf & Energie
+
+Schlafdauer, Schlafscore/-qualität und Energie kommen aus den Wellness-Daten von intervals.icu.
+Als Energie-Wert wird das Feld `energy` bzw. `bodyBattery` verwendet — oder jedes eigene Wellness-Feld,
+dessen Name „energy“ oder „battery“ enthält. Die Skala (0–100, 1–10 oder 1–5) wird automatisch erkannt.
+Der Schlafbedarf (Standard 8 h) lässt sich in den Einstellungen unter „Erholung“ anpassen.

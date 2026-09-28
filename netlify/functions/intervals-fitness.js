@@ -35,6 +35,7 @@ exports.handler = async (event) => {
         spO2: d.spO2 ?? null,
         respiration: d.respiration ?? null,
         weight: d.weight ?? null,
+        dayLoad: d.ctlLoad ?? null,             // Trainingslast des Tages laut intervals.icu
       };
     }).filter((d) => d.ctl != null);
 

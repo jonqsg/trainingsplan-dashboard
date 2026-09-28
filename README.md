@@ -23,7 +23,8 @@ netlify/functions/
   settings.js              → GET/POST Einstellungen: FTP, HFmax, Saisonziel, Standort …
   store.js                 → GET/POST ?key=library|journal (Vorlagen, Check-ins, Rückblicke)
   intervals-fitness.js     → Proxy: CTL/ATL/TSB + Wellness (HRV, Ruhepuls, Schlaf, Schlafscore, Energie/Body Battery) von intervals.icu
-  intervals-activities.js  → Proxy: Aktivitäten inkl. Leistung und eFTP
+  intervals-activities.js  → Proxy: Aktivitäten inkl. Leistung, eFTP und Paarung mit Kalender-Events
+  intervals-activity.js    → Proxy: Details einer Aktivität (Intervalle) für die Detailseite
   intervals-power-curve.js → Proxy: Leistungskurve (Bestwerte je Dauer)
   intervals-push-event.js  → Workout als (strukturiertes) Kalender-Event anlegen/aktualisieren/löschen
   generate-plan.js         → lässt Claude einen Wochenplan vorschlagen (Trainingswissenschaft)
@@ -135,3 +136,14 @@ Schlafdauer, Schlafscore/-qualität und Energie kommen aus den Wellness-Daten vo
 Als Energie-Wert wird das Feld `energy` bzw. `bodyBattery` verwendet — oder jedes eigene Wellness-Feld,
 dessen Name „energy“ oder „battery“ enthält. Die Skala (0–100, 1–10 oder 1–5) wird automatisch erkannt.
 Der Schlafbedarf (Standard 8 h) lässt sich in den Einstellungen unter „Erholung“ anpassen.
+
+## Aktivitäten & Verknüpfung mit dem Plan
+
+Absolvierte Aktivitäten werden zuerst über die Paarung in intervals.icu mit dem geplanten Workout
+verknüpft (Event-ID beim Senden an intervals.icu), sonst über Tag und Sportart. Jede Aktivität hat
+eine Detailseite (Kennzahlen, Zonenverteilung, Intervalle, Vergleich geplant vs. absolviert).
+
+**Strava-Hinweis:** Aktivitäten, die über Strava nach intervals.icu kommen, gibt die intervals.icu-API
+wegen der Strava-Nutzungsbedingungen nur als Stub (ohne Dauer, Distanz, Name) heraus. Das Dashboard
+erkennt sie und übernimmt Dauer/Last aus dem Plan. Für vollständige Daten Garmin/Wahoo/Zwift direkt
+in intervals.icu verbinden.

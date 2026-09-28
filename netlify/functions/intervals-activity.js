@@ -1,10 +1,25 @@
 // Proxy: Details einer einzelnen Aktivität für die Detailseite im Dashboard —
 // vor allem die Intervalle/Laps, die in der Aktivitätenliste nicht enthalten sind.
+// ?strava=<id> → Runden direkt von Strava (für Aktivitäten, die intervals.icu nur als Stub liefert)
 const { intervalsFetch } = require("./lib/intervalsClient");
+const { planStore } = require("./lib/blobStore");
+const strava = require("./lib/strava");
 
 exports.handler = async (event) => {
   try {
-    const id = (event.queryStringParameters || {}).id;
+    const q = event.queryStringParameters || {};
+    if (q.strava) {
+      const token = await strava.accessToken(planStore(event));
+      if (!token) throw new Error("Strava ist nicht verbunden.");
+      const laps = await strava.stravaFetch(token, `/activities/${encodeURIComponent(q.strava)}/laps`);
+      const intervals = (Array.isArray(laps) ? laps : []).map((l) => ({
+        label: l.name || null, type: null, secs: l.moving_time ?? l.elapsed_time ?? null,
+        km: l.distance ? +(l.distance / 1000).toFixed(2) : null,
+        watts: l.device_watts ? l.average_watts ?? null : null, hr: l.average_heartrate ?? null, intensity: null, zone: null,
+      }));
+      return { statusCode: 200, headers: cors(), body: JSON.stringify({ id: q.strava, intervals, source: "strava" }) };
+    }
+    const id = q.id;
     if (!id) throw new Error("id fehlt.");
     const a = await intervalsFetch(`/activity/${encodeURIComponent(id)}?intervals=true`);
     const intervals = (Array.isArray(a && a.icu_intervals) ? a.icu_intervals : []).map((i) => ({

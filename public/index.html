@@ -956,7 +956,7 @@ async function syncFromIntervals(manual=true){
   try {
     const [fitness, activities] = await Promise.all([
       fetchJSON(`${API}/intervals-fitness?oldest=${addDays(todayKey(), -120)}`),
-      fetchJSON(`${API}/intervals-activities?oldest=${addDays(todayKey(), -365)}`),
+      fetchJSON(`${API}/intervals-activities?oldest=${addDays(todayKey(), -365)}${Number(state.settings.ftp) ? `&ftp=${Number(state.settings.ftp)}` : ""}`),
     ]);
     if (fitness.length){ FITNESS_LIVE = fitness; LS.set("cache:fitness", fitness); }
     if (activities.length){ ACTIVITIES_LIVE = activities; LS.set("cache:activities", activities); }
@@ -1666,7 +1666,7 @@ function activityRow(a){
   return `<button class="row-item" onclick="openActivity(${idx})">
     <span class="tile" style="background:${d.color}">${icon(d.icon,18)}</span>
     <span class="ri-main"><div class="ri-title">${esc(actName(a))}</div>
-      <div class="ri-meta"><span>${relDate(a.date)}</span>${a.min ? `<span>${fmtDur(a.min)}</span>` : a.stub ? `<span>Strava · Details nicht per API</span>` : ""}${a.elev?`<span>${a.elev} Hm</span>`:""}${a.hr?`<span>♥ ${Math.round(a.hr)}</span>`:""}${a.watts?`<span>${Math.round(a.watts)} W</span>`:""}
+      <div class="ri-meta"><span>${relDate(a.date)}</span>${a.min ? `<span>${fmtDur(a.min)}</span>` : a.stub ? `<span>Strava · nicht verbunden</span>` : ""}${a.elev?`<span>${a.elev} Hm</span>`:""}${a.hr?`<span>♥ ${Math.round(a.hr)}</span>`:""}${a.watts?`<span>${Math.round(a.watts)} W</span>`:""}
       ${link?`<span style="color:var(--good); font-weight:650">✓ Plan</span>`:""}</div></span>
     <span class="ri-side">${a.km ? `<b class="num">${fmtNum(a.km)} km</b>` : link && a.stub ? `<b class="num">${fmtDur(link.w.duration)}</b>` : ""}${a.load!=null?`${a.load} TSS`:""}</span>
   </button>`;
@@ -1973,8 +1973,10 @@ function openCheckin(){
 function openSettings(){
   const s = state.settings;
   state.modal = { type:"settings", ftp:s.ftp, hrMax:s.hrMax, raceName:(s.race&&s.race.name)||"", raceDate:(s.race&&s.race.date)||"", raceType:(s.race&&s.race.type)||"",
-    sleepNeed:s.sleepNeed||"", location:s.location||DEFAULT_LOCATION, locQuery:"", locResults:null };
+    sleepNeed:s.sleepNeed||"", location:s.location||DEFAULT_LOCATION, locQuery:"", locResults:null, strava:null };
   renderModal();
+  fetchJSON(`${API}/strava-auth?status=1`).then(st=>{ if(state.modal && state.modal.type==="settings"){ state.modal.strava=st; renderModal(); } })
+    .catch(()=>{ if(state.modal && state.modal.type==="settings"){ state.modal.strava={ configured:false, connected:false, error:true }; renderModal(); } });
 }
 const setM = (k, v) => { state.modal[k] = v; };
 
@@ -2052,6 +2054,10 @@ function renderSettingsModal(m){
     ${m.locResults ? `<div class="chips" style="margin-top:10px">${m.locResults.length ? m.locResults.map((r,i)=>`<button class="chip" onclick="pickLocation(${i})">${esc(r.name)}</button>`).join("") : `<span class="muted">Nichts gefunden.</span>`}</div>` : ""}
 
     <div class="section-title">Integrationen</div>
+    <div class="set-row"><div class="t">Strava${m.strava && m.strava.connected ? ` <span style="color:var(--good)">· verbunden${m.strava.athlete ? ` als ${esc(m.strava.athlete)}` : ""}</span>` : ""}<small>Ergänzt Aktivitäten, die über Strava nach intervals.icu kommen (z. B. Magene/Onelap) — die gibt intervals.icu nicht per API heraus.${m.strava && !m.strava.configured ? " Zuerst STRAVA_CLIENT_ID und STRAVA_CLIENT_SECRET in Netlify setzen (siehe README)." : ""}</small></div>
+      ${!m.strava ? `<span class="muted" style="font-size:13px">…</span>` : m.strava.connected
+        ? `<button class="btn xs secondary" onclick="disconnectStrava()">Trennen</button>`
+        : `<a class="btn xs ${m.strava.configured ? "" : "secondary"}" href="${API}/strava-auth" ${m.strava.configured ? "" : `onclick="return false" aria-disabled="true" style="opacity:.5"`}>Verbinden</a>`}</div>
     <div class="set-row"><div class="t">Automatisch an intervals.icu senden<small>Neue und verschobene Workouts landen als strukturiertes Workout im Kalender — und von dort auf Garmin, Wahoo oder Zwift.</small></div>
       ${sw(s.autoPush, "toggleSetting('autoPush', this.checked)")}</div>
     <div class="set-row"><div class="t">Tägliche Erinnerung<small>Push-Nachricht um ca. 7 Uhr mit den Einheiten des Tages. Auf dem iPhone: App zum Home-Bildschirm hinzufügen und von dort öffnen.</small>
@@ -2064,6 +2070,11 @@ function renderSettingsModal(m){
       <label class="btn secondary sm file-btn">${icon("upload",16)}Importieren<input type="file" accept=".json,application/json" onchange="importData(event)"></label>
     </div>
     <div class="sheet-foot"><button class="btn block" onclick="saveSettings()">Speichern</button></div>`;
+}
+async function disconnectStrava(){
+  if(!confirm("Verbindung zu Strava trennen?")) return;
+  try { await fetchJSON(`${API}/strava-auth?disconnect=1`, { method:"POST" }); state.modal.strava = { ...state.modal.strava, connected:false, athlete:null }; renderModal(); toast("Strava getrennt"); }
+  catch(e){ toast("Trennen fehlgeschlagen: " + e.message, "err"); }
 }
 function onZonesInput(){ const el=document.getElementById("zone-tables"); if(el) el.innerHTML = zoneTables(state.modal.ftp, state.modal.hrMax); }
 async function searchLocation(){
@@ -2482,7 +2493,7 @@ function openActivity(idx){
   renderModal();
   if(a.id!=null && !a.stub && ACTIVITIES_LIVE && !ACT_DETAIL[a.id]){
     ACT_DETAIL[a.id] = { loading:true };
-    fetchJSON(`${API}/intervals-activity?id=${encodeURIComponent(a.id)}`)
+    fetchJSON(a.viaStrava ? `${API}/intervals-activity?strava=${encodeURIComponent(a.stravaId)}` : `${API}/intervals-activity?id=${encodeURIComponent(a.id)}`)
       .then(d=>{ ACT_DETAIL[a.id] = d; })
       .catch(()=>{ ACT_DETAIL[a.id] = { intervals:[] }; })
       .finally(()=>{ if(state.modal && state.modal.type==="activity") renderModal(); });
@@ -2518,13 +2529,15 @@ function renderActivityModal(m){
       <div class="sheet-sub">${fmtDay(a.date)}${time ? ` · ${time} Uhr` : ""} · ${d.label}${a.device ? ` · ${esc(a.device)}` : a.source ? ` · ${esc(a.source)}` : ""}</div>
     </div>
     ${a.stub ? `<div class="hint" style="--hc:var(--info)">${icon("link",18)}<div>Diese Aktivität kommt über <b>Strava</b>. intervals.icu darf Strava-Daten laut deren Nutzungsbedingungen nicht per API weitergeben — das Dashboard sieht nur, dass es sie gibt.
-      ${w ? " Dauer und Last werden deshalb aus dem geplanten Workout übernommen." : ""}<br><span class="muted" style="font-size:13px">Abhilfe: Garmin, Wahoo, Zwift o. Ä. direkt in intervals.icu verbinden (Einstellungen → Verbindungen), dann kommen alle Werte an.</span></div></div>` : ""}
+      ${w ? " Dauer und Last werden deshalb aus dem geplanten Workout übernommen." : ""}<br>
+      <button class="btn sm secondary" onclick="openSettings()">${icon("link",15)}Strava in den Einstellungen verbinden</button></div></div>` : ""}
+    ${a.viaStrava ? `<div class="note"><div class="k">${icon("link",14,2.2)}Daten direkt von Strava</div>intervals.icu gibt Strava-Aktivitäten nicht per API heraus — die Werte kommen deshalb direkt von Strava.${a.loadEstimated ? " Die Last ist aus Leistung und FTP geschätzt." : a.load==null ? " Ohne Leistungsmesser gibt es keine Last von Strava; angezeigt wird die Tageslast aus intervals.icu." : ""}</div>` : ""}
     <div class="tiles">
       ${tile("Dauer", a.min ? fmtDur(a.min) : w ? `≈ ${fmtDur(w.duration)}` : "–")}
       ${a.elapsedMin && a.elapsedMin-a.min>=5 ? tile("Gesamtzeit", fmtDur(a.elapsedMin)) : ""}
       ${a.km ? tile("Distanz", fmtNum(a.km), "km") : ""}
       ${a.elev ? tile("Höhenmeter", a.elev, "Hm") : ""}
-      ${tile("Last", a.load!=null ? Math.round(a.load) : a.stub && wr && wr.dayLoad!=null ? `≈ ${Math.round(wr.dayLoad)}` : null, "TSS")}
+      ${tile("Last", a.load!=null ? `${a.loadEstimated ? "≈ " : ""}${Math.round(a.load)}` : (a.stub || a.viaStrava) && wr && wr.dayLoad!=null ? `≈ ${Math.round(wr.dayLoad)}` : null, "TSS")}
       ${a.intensity!=null ? tile("Intensität", `${Math.round(a.intensity)} %`) : ""}
       ${a.hr ? tile("Ø Herzfrequenz", Math.round(a.hr), a.maxHr ? `max ${Math.round(a.maxHr)}` : "bpm") : ""}
       ${a.watts ? tile("Ø Leistung", Math.round(a.watts), "W") : ""}
@@ -2541,7 +2554,7 @@ function renderActivityModal(m){
         <div class="mini" style="background:var(--surface)"><div class="k">Dauer geplant</div><div class="v num">${fmtDur(w.duration)}</div></div>
         <div class="mini" style="background:var(--surface)"><div class="k">Erfüllt</div><div class="v num" style="color:${pct==null ? "var(--good)" : pct>=80 && pct<=120 ? "var(--good)" : "var(--sst)"}">${pct!=null ? `${pct} %` : "✓"}</div></div>
         <div class="mini" style="background:var(--surface)"><div class="k">Zone</div><div class="v">${zchip(w.zone)}</div></div>
-        <div class="mini" style="background:var(--surface)"><div class="k">Last geplant / ist</div><div class="v num">${w.load??"–"} / ${a.load!=null ? Math.round(a.load) : a.stub && wr && wr.dayLoad!=null ? `≈ ${Math.round(wr.dayLoad)}` : "–"}</div></div>
+        <div class="mini" style="background:var(--surface)"><div class="k">Last geplant / ist</div><div class="v num">${w.load??"–"} / ${a.load!=null ? Math.round(a.load) : (a.stub || a.viaStrava) && wr && wr.dayLoad!=null ? `≈ ${Math.round(wr.dayLoad)}` : "–"}</div></div>
       </div>
       <p class="muted" style="font-size:12px; margin-top:8px">${a.pairedEventId!=null && a.pairedEventId===w.eventId ? "In intervals.icu mit dem Kalender-Event verknüpft." : "Automatisch über Tag und Sportart zugeordnet."}</p>
       <button class="btn secondary sm" style="margin-top:10px; background:var(--surface)" onclick="openDetail(${w.id}, '${link.k}')">Geplantes Workout öffnen${icon("chevR",16,2.2)}</button></div>`
@@ -2549,12 +2562,13 @@ function renderActivityModal(m){
     ${zoneBars(a.zoneTimes, "Zeit in Leistungszonen")}
     ${zoneBars(a.hrZoneTimes, "Zeit in Herzfrequenzzonen")}
     ${det && det.loading ? `<p class="muted" style="margin-top:12px; font-size:13px">Intervalle werden geladen …</p>` : ""}
-    ${ints.length > 1 ? `<div class="panel"><div class="panel-title">Intervalle <span>${ints.length}</span></div>
+    ${ints.length > 1 ? `<div class="panel"><div class="panel-title">${det.source==="strava" ? "Runden" : "Intervalle"} <span>${ints.length}</span></div>
       <div class="int-list">${(()=>{ let n=0; return ints.map(i=>{ const rec=i.type==="RECOVERY"; if(!rec) n++; return `<div class="int-row ${rec?"rec":""}"><span class="num">${esc(i.label || (rec ? "Pause" : `#${n}`))}</span>
         <span class="num">${fmtSecs(i.secs)}</span><span class="num">${i.watts ? `${Math.round(i.watts)} W` : i.km ? `${fmtNum(i.km,2)} km` : ""}</span><span class="num">${i.hr ? `♥ ${Math.round(i.hr)}` : ""}</span></div>`; }).join(""); })()}</div></div>` : ""}
     ${a.description ? `<div class="note"><div class="k">Beschreibung</div>${esc(a.description)}</div>` : ""}
     <div class="action-list">
       ${a.id!=null && ACTIVITIES_LIVE ? `<a class="btn secondary" href="https://intervals.icu/activities/${encodeURIComponent(a.id)}" target="_blank" rel="noopener">${icon("link",18)}In intervals.icu öffnen</a>` : ""}
+      ${a.stravaId ? `<a class="btn secondary" href="https://www.strava.com/activities/${encodeURIComponent(a.stravaId)}" target="_blank" rel="noopener">${icon("link",18)}In Strava öffnen</a>` : ""}
     </div>
     <div class="sheet-foot"><button class="btn block secondary" onclick="closeModal()">Schließen</button></div>`;
 }

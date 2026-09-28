@@ -24,7 +24,9 @@ netlify/functions/
   store.js                 → GET/POST ?key=library|journal (Vorlagen, Check-ins, Rückblicke)
   intervals-fitness.js     → Proxy: CTL/ATL/TSB + Wellness (HRV, Ruhepuls, Schlaf, Schlafscore, Energie/Body Battery) von intervals.icu
   intervals-activities.js  → Proxy: Aktivitäten inkl. Leistung, eFTP und Paarung mit Kalender-Events
-  intervals-activity.js    → Proxy: Details einer Aktivität (Intervalle) für die Detailseite
+  intervals-activity.js    → Proxy: Details einer Aktivität (Intervalle bzw. Strava-Runden) für die Detailseite
+  strava-auth.js           → einmalige Strava-Verbindung (OAuth), Status und Trennen
+  lib/strava.js            → Strava-API-Client (Token-Erneuerung, Aktivitäten mit Cache)
   intervals-power-curve.js → Proxy: Leistungskurve (Bestwerte je Dauer)
   intervals-push-event.js  → Workout als (strukturiertes) Kalender-Event anlegen/aktualisieren/löschen
   generate-plan.js         → lässt Claude einen Wochenplan vorschlagen (Trainingswissenschaft)
@@ -74,6 +76,8 @@ Im Netlify-Dashboard: Site settings → Environment variables → "Add a variabl
 | `VAPID_PUBLIC_KEY` | nur für die tägliche Push-Erinnerung (siehe unten) |
 | `VAPID_PRIVATE_KEY` | nur für die tägliche Push-Erinnerung |
 | `VAPID_SUBJECT` | optional, z.B. `mailto:du@example.com` |
+| `STRAVA_CLIENT_ID` | optional, nur für Strava-Aktivitäten (siehe „Strava verbinden“) |
+| `STRAVA_CLIENT_SECRET` | optional, siehe „Strava verbinden“ |
 
 **VAPID-Schlüssel erzeugen** (einmalig, lokal mit Node.js):
 
@@ -112,8 +116,8 @@ der Rest des Stacks. Aktuelle Preise: https://claude.com/pricing
 
 ## Erweitern
 
-- **Neue Datenquelle anbinden** (z.B. Strava): neue Datei `netlify/functions/strava-activities.js`
-  nach dem Vorbild von `intervals-activities.js`, eigene Umgebungsvariablen für den Strava-Key.
+- **Neue Datenquelle anbinden**: nach dem Vorbild von `lib/strava.js` + `intervals-activities.js`
+  (Anreicherung vorhandener Aktivitäten) mit eigenen Umgebungsvariablen für den API-Key.
 - **Mehr Nutzer/Athleten**: `plan.js`/`settings.js` derzeit mit festen Keys (`plan.json`,
   `settings.json`). Für mehrere Nutzer: Key um eine Nutzer-ID erweitern (z.B. via einfachem
   Passwort-Query-Parameter oder Netlify Identity für echte Logins).
@@ -143,7 +147,30 @@ Absolvierte Aktivitäten werden zuerst über die Paarung in intervals.icu mit de
 verknüpft (Event-ID beim Senden an intervals.icu), sonst über Tag und Sportart. Jede Aktivität hat
 eine Detailseite (Kennzahlen, Zonenverteilung, Intervalle, Vergleich geplant vs. absolviert).
 
-**Strava-Hinweis:** Aktivitäten, die über Strava nach intervals.icu kommen, gibt die intervals.icu-API
-wegen der Strava-Nutzungsbedingungen nur als Stub (ohne Dauer, Distanz, Name) heraus. Das Dashboard
-erkennt sie und übernimmt Dauer/Last aus dem Plan. Für vollständige Daten Garmin/Wahoo/Zwift direkt
-in intervals.icu verbinden.
+**Strava-Hinweis:** Aktivitäten, die über Strava nach intervals.icu kommen (z. B. von Magene/Onelap),
+gibt die intervals.icu-API wegen der Strava-Nutzungsbedingungen nur als Stub (ohne Dauer, Distanz, Name)
+heraus. Ist Strava wie unten beschrieben verbunden, ergänzt `intervals-activities.js` diese Stubs direkt
+mit den Werten aus der Strava-API (Zuordnung über die Startzeit). Ohne Verbindung übernimmt das Dashboard
+Dauer/Last aus dem Plan.
+
+### Strava verbinden (optional)
+
+1. Auf https://www.strava.com/settings/api eine eigene API-Anwendung anlegen:
+   - *Application Name*: beliebig, z. B. „Trainingsdashboard“
+   - *Website*: die URL deiner Netlify-Site
+   - *Authorization Callback Domain*: nur der Domainname deiner Site, z. B. `mein-training.netlify.app`
+2. In Netlify unter Site settings → Environment variables setzen:
+
+   | Variable | Wert |
+   |---|---|
+   | `STRAVA_CLIENT_ID` | „Client ID“ der Strava-App |
+   | `STRAVA_CLIENT_SECRET` | „Client Secret“ der Strava-App |
+
+3. Neu deployen, dann im Dashboard Einstellungen → Integrationen → Strava → „Verbinden“ und bei Strava
+   „Autorisieren“ tippen. Die Tokens landen in Netlify Blobs und werden automatisch erneuert.
+4. Im Dashboard synchronisieren — Strava-Aktivitäten zeigen jetzt Dauer, Distanz, Herzfrequenz, Leistung
+   und Runden.
+
+Strava liefert keine Trainingslast: Mit Leistungsmesser wird sie aus Normalized Power und FTP (aus den
+Einstellungen) geschätzt, sonst wird die Tageslast aus intervals.icu angezeigt. Die Strava-Liste wird
+10 Minuten zwischengespeichert, damit häufige Syncs die Strava-Ratenlimits nicht belasten.

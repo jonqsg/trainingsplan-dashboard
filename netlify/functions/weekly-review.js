@@ -16,20 +16,22 @@ exports.handler = async (event) => {
   }
 };
 
-function buildPrompt({ week, days, fitness, season, stats }) {
+function buildPrompt({ week, days, fitness, season, stats, recovery }) {
   const lines = (days || []).map((d) => {
     const planned = (d.planned || []).map((w) =>
       `  • geplant: ${w.title} (${w.discipline}, ${w.zone}, ${w.duration} min) → ${w.done ? `absolviert${w.actualMin != null ? ` ${w.actualMin} min` : ""}` : "nicht absolviert"}${w.rpe ? `, RPE ${w.rpe}` : ""}${w.feel ? `, Gefühl ${w.feel}/5` : ""}${w.feedback ? `, Notiz: "${w.feedback}"` : ""}`);
     const extra = (d.unplanned || []).map((a) => `  • ungeplant: ${a.name} ${a.min} min${a.km ? `, ${a.km} km` : ""}${a.load ? `, Load ${a.load}` : ""}`);
     const ci = d.checkin ? `  • Check-in: Schlaf ${d.checkin.sleep}/5, Energie ${d.checkin.energy}/5, Muskelkater ${d.checkin.soreness}/5, Stress ${d.checkin.stress}/5` : null;
-    return [`- ${d.date}:`, ...planned, ...extra, ...(ci ? [ci] : []), ...(!planned.length && !extra.length ? ["  • Ruhetag"] : [])].join("\n");
+    const wl = d.wellness ? `  • Erholung: ${[d.wellness.sleepH != null ? `Schlaf ${d.wellness.sleepH} h` : null, d.wellness.sleepScore != null ? `Schlafscore ${d.wellness.sleepScore}` : null, d.wellness.energyPct != null ? `Energie ${d.wellness.energyPct} %` : null].filter(Boolean).join(", ")}` : null;
+    return [`- ${d.date}:`, ...planned, ...extra, ...(ci ? [ci] : []), ...(wl ? [wl] : []), ...(!planned.length && !extra.length ? ["  • Ruhetag"] : [])].join("\n");
   }).join("\n");
 
   return `Du bist ein erfahrener, motivierender Ausdauersport-Trainer (Triathlon, polarisiertes Training nach Seiler).
 Werte die Trainingswoche ab ${week} eines Athleten aus, der vom Handball kommt und Richtung Triathlon aufbaut.
 ${season && season.date ? `Saisonziel: ${season.name || "Triathlon"} am ${season.date}, noch ${season.weeks} Wochen, Phase "${season.phase}".` : ""}
 Fitness: CTL ${fitness?.ctlStart} → ${fitness?.ctlEnd}, aktuelle Form (TSB) ${fitness?.tsb}.
-Kennzahlen: ${stats?.done}/${stats?.planned} Einheiten, Erfüllung ${stats?.compliance}%, geplante Last ${stats?.load} TSS, Anteil locker ${stats?.lowPct}%.
+${recovery ? `Erholung der Woche: ${recovery.sleepAvgH != null ? `Schlaf Ø ${recovery.sleepAvgH} h (Bedarf ${recovery.sleepNeedH} h)` : ""}${recovery.sleepAvgH != null && recovery.energyAvgPct != null ? ", " : ""}${recovery.energyAvgPct != null ? `Energie Ø ${recovery.energyAvgPct} %` : ""}. Beziehe Schlaf und Energie in die Bewertung ein (z. B. ob verpasste oder schwere Einheiten mit schlechtem Schlaf/niedriger Energie zusammenhängen) und gib bei Bedarf eine konkrete Schlaf-/Erholungsempfehlung.
+` : ""}Kennzahlen: ${stats?.done}/${stats?.planned} Einheiten, Erfüllung ${stats?.compliance}%, geplante Last ${stats?.load} TSS, Anteil locker ${stats?.lowPct}%.
 
 Tage:
 ${lines}

@@ -23,14 +23,14 @@
     --radius:20px;
     --c-rad:#2F80ED; --c-rolle:#7C5CFF; --c-lauf:#FF7A1A; --c-schwimmen:#0FB5C4; --c-kraft:#E0457B; --c-sonstiges:#8A8F98;
     --z1:#A0A6B1; --z2:#3B82F6; --z3:#22C55E; --sst:#EAB308; --thr:#F97316; --vo2:#EF4444; --ana:#A855F7;
-    --ctl:#2F80ED; --atl:#E0457B;
+    --ctl:#2F80ED; --atl:#E0457B; --sleep:#6366F1; --energy:#0D9488;
     --sans:-apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg:#0A0B0E; --surface:#15171C; --surface-2:#1E2128; --ink:#F3F4F6; --sub:#9CA1AC; --faint:#6C717B;
       --line:rgba(255,255,255,.07); --line-strong:rgba(255,255,255,.14);
-      --accent-soft:rgba(255,91,36,.18); --shadow:none;
+      --accent-soft:rgba(255,91,36,.18); --shadow:none; --sleep:#818CF8; --energy:#2DD4BF;
     }
   }
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
@@ -338,6 +338,7 @@
   .mini { background:var(--surface-2); border-radius:14px; padding:10px 12px; }
   .mini .k { font-size:12px; color:var(--sub); font-weight:600; }
   .mini .v { font-size:18px; font-weight:750; margin-top:2px; }
+  .mini .s { font-size:12px; color:var(--sub); margin-top:2px; }
   .note { background:var(--surface-2); border-radius:14px; padding:12px 14px; font-size:14px; line-height:1.5; margin-top:12px; white-space:pre-line; }
   .note .k { font-size:12px; font-weight:700; color:var(--sub); margin-bottom:4px; display:flex; align-items:center; gap:6px; }
   .warn-box { background:color-mix(in srgb, var(--warn) 12%, transparent); color:var(--warn); border-radius:14px; padding:12px 14px; font-size:14px; margin-top:12px; line-height:1.45; }
@@ -423,6 +424,7 @@ const ICON = {
   heart:'<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>',
   route:'<circle cx="6" cy="19" r="2"/><circle cx="18" cy="5" r="2"/><path d="M8 19h8.5a3.5 3.5 0 0 0 0-7h-9a3.5 3.5 0 0 1 0-7H16"/>',
   link:'<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
+  battery:'<rect x="3" y="7" width="16" height="10" rx="2.5"/><path d="M22 11v2M7 10.5v3M10.5 10.5v3"/>',
   moon:'<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>',
   target:'<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>',
   sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
@@ -841,9 +843,14 @@ function generateAutoPlan(days, ctl, adj={ factor:1, reasons:[] }){
   const longDay = active[0];
   assign(longDay, "rad", Math.min(longDay.hours*60,180), "z2", "Lange Grundlagenfahrt",
     "Aerobe Grundlagenausdauer: verbessert Kapillarisierung, Fettstoffwechsel und mitochondriale Dichte — das Fundament der Wettkampfausdauer für den Triathlon.");
-  const secondRideDay = active.find(d=>!used.has(d.key) && d.hours>=0.75);
+  // Harte Einheit nicht direkt nach schlechter Tagesform legen; bei schwacher Erholung (Schlaf/Energie) ganz locker
+  const rideCands = active.filter(d=>!used.has(d.key) && d.hours>=0.75);
+  const secondRideDay = rideCands.find(d=>!adj.easyUntil || d.key>adj.easyUntil) || rideCands[0];
+  const hardOk = secondRideDay && !adj.limitIntensity && (!adj.easyUntil || secondRideDay.key>adj.easyUntil);
   if(secondRideDay){
-    if(phase.id==="build") assign(secondRideDay,"rad",Math.min(secondRideDay.hours*60,75),"sst","Sweet-Spot-Intervalle",
+    if(!hardOk && (phase.id==="build" || phase.id==="peak")) assign(secondRideDay,"rad",Math.min(secondRideDay.hours*60,75),"z2","Lockere Grundlage statt Intervallen",
+      "Deine Erholung (Schlaf, Energie, Tagesform) reicht gerade nicht für einen harten Reiz — Intervalle bringen unter Erholungsdefizit wenig Anpassung, aber viel Ermüdung. Locker halten, die Qualität kommt zurück, sobald du ausgeruht bist.");
+    else if(phase.id==="build") assign(secondRideDay,"rad",Math.min(secondRideDay.hours*60,75),"sst","Sweet-Spot-Intervalle",
       "Sweet-Spot-Arbeit knapp unter der Schwelle hebt die FTP mit vertretbarer Ermüdung — Kernreiz der Aufbauphase.");
     else if(phase.id==="peak") assign(secondRideDay,"rad",Math.min(secondRideDay.hours*60,75),"thr","Schwellenintervalle",
       "Wettkampfnahe Intensität an der Schwelle — trainiert das Tempo, das du im Triathlon halten willst.");
@@ -860,7 +867,8 @@ function generateAutoPlan(days, ctl, adj={ factor:1, reasons:[] }){
   const safeLoad = ctl*7*1.15;
   const warning = totalLoad > safeLoad*1.25 ? `Geplante Wochenlast (${totalLoad}) liegt deutlich über einem verträglichen Aufbau-Tempo (~${Math.round(safeLoad)}). Risiko für Übertraining/Verletzung — Umfang oder Intensität reduzieren.` : null;
   const note = adj.factor!==1 ? `Umfang ${adj.factor<1?"reduziert":"erhöht"} (${signed((adj.factor-1)*100,0)} %): ${adj.reasons.join(", ")}.` : null;
-  return { workouts, warning, note, totalLoad, safeLoad:Math.round(safeLoad) };
+  const recNote = adj.limitIntensity ? "Wegen schwacher Erholung (Schlaf/Energie) diese Woche ohne harte Intervalle." : adj.easyUntil ? "Wegen niedriger Tagesform heute/morgen keine harte Einheit." : null;
+  return { workouts, warning, note:[note, recNote].filter(Boolean).join(" ") || null, totalLoad, safeLoad:Math.round(safeLoad) };
 }
 
 /* ================= State & Persistenz ================= */
@@ -872,7 +880,7 @@ const VIEWS = [
   { id:"form", label:"Fortschritt", icon:"trend" },
   { id:"aktivitaeten", label:"Aktivitäten", icon:"list" },
 ];
-const DEFAULT_SETTINGS = { ftp:"", hrMax:"", ftpHistory:[], race:{ name:"", date:"", type:"" }, location:DEFAULT_LOCATION, autoPush:false, reminders:false };
+const DEFAULT_SETTINGS = { ftp:"", hrMax:"", sleepNeed:"", ftpHistory:[], race:{ name:"", date:"", type:"" }, location:DEFAULT_LOCATION, autoPush:false, reminders:false };
 const state = {
   view: LS.get("view", "heute"),
   plan: {},
@@ -1066,16 +1074,108 @@ function weeklyVolume(weeks=8){
   });
 }
 
+/* ================= Schlaf & Energie ================= */
+const sleepNeed = () => Number(state.settings.sleepNeed) || 8; // Schlafbedarf in Stunden (Einstellungen)
+const sleepH = (d) => d && d.sleepSecs ? d.sleepSecs/3600 : null;
+const mean = (v) => { v=v.filter(x=>x!=null && !isNaN(x)); return v.length ? v.reduce((a,b)=>a+b,0)/v.length : null; };
+function wellnessRows(){ return (FITNESS_LIVE||[]).filter(d=>d.day); }
+// Energie kommt je nach Quelle als 0–100 (z. B. Body Battery), 1–10 oder 1–5 → auf 0–100 normieren.
+function energyScale(){
+  const max = Math.max(0, ...wellnessRows().map(d=>d.energy).filter(v=>v!=null));
+  return max>10 ? 100 : max>5 ? 10 : 5;
+}
+function energyPct(v, scale=energyScale()){
+  if(v==null) return null;
+  return Math.round(Math.min(100, Math.max(0, scale===5 ? (v-1)/4*100 : v/scale*100)));
+}
+const fmtEnergy = (v, scale=energyScale()) => v==null ? "–" : scale===100 ? `${Math.round(v)}` : `${fmtNum(v, v%1?1:0)}/${scale}`;
+// intervals.icu-Schlafqualität: 1 = super … 4 = schlecht
+const sleepQualityPct = (q) => q==null ? null : Math.round((4-q)/3*100);
+const sleepDurScore = (h) => h>=sleepNeed() ? 95 : h>=sleepNeed()-1 ? 80 : h>=sleepNeed()-2 ? 60 : 35;
+// Eine Nacht als 0–100: Dauer, ggf. Schlafscore und -qualität des Geräts gemittelt
+function nightScore(d){
+  const h = sleepH(d); const parts = [];
+  if(h) parts.push(sleepDurScore(h));
+  if(d && d.sleepScore!=null) parts.push(d.sleepScore);
+  if(d && d.sleepQuality!=null) parts.push(sleepQualityPct(d.sleepQuality));
+  return parts.length ? Math.round(mean(parts)) : null;
+}
+const hasRecoveryData = (d) => d && (d.sleepSecs || d.sleepScore!=null || d.sleepQuality!=null || d.energy!=null);
+
+// Erholungsbild der letzten `days` Tage im Vergleich zur 28-Tage-Basis davor
+function recoveryStats(days=7){
+  const rows = wellnessRows(), tk = todayKey(), from = addDays(tk, -days+1), baseFrom = addDays(from, -28);
+  const recent = rows.filter(d=>d.day>=from && d.day<=tk), base = rows.filter(d=>d.day>=baseFrom && d.day<from);
+  if(!recent.some(hasRecoveryData)) return null;
+  const scale = energyScale(), need = sleepNeed();
+  const nights = recent.filter(d=>sleepH(d));
+  const energyNow = [...recent].reverse().find(d=>d.energy!=null);
+  const lastNight = [...recent].reverse().find(d=>sleepH(d) || d.sleepScore!=null);
+  const s = {
+    days, need, scale,
+    nights: nights.length,
+    sleepAvg: mean(nights.map(sleepH)),
+    sleepBase: mean(base.map(sleepH)),
+    sleepDebt: Math.max(0, nights.reduce((sum,d)=>sum + need - sleepH(d), 0)),
+    sleepScoreAvg: mean(recent.map(d=>d.sleepScore)),
+    nightAvg: mean(recent.map(nightScore)),
+    energyAvg: mean(recent.map(d=>energyPct(d.energy, scale))),
+    energyBase: mean(base.map(d=>energyPct(d.energy, scale))),
+    energyNow: energyNow ? { day:energyNow.day, raw:energyNow.energy, pct:energyPct(energyNow.energy, scale) } : null,
+    lastNight: lastNight && lastNight.day>=addDays(tk,-1) ? { day:lastNight.day, hours:sleepH(lastNight), score:lastNight.sleepScore, quality:lastNight.sleepQuality, hr:lastNight.avgSleepingHR } : null,
+    series: recent.map(d=>({ day:d.day, sleepH:sleepH(d) ? +sleepH(d).toFixed(1) : null, sleepScore:d.sleepScore, energy:energyPct(d.energy, scale) })),
+  };
+  s.energyTrend = s.energyAvg!=null && s.energyBase!=null ? s.energyAvg - s.energyBase : null;
+  // Gesamtbild 0–100 aus Schlaf der Woche und Energieniveau
+  const parts = [];
+  if(s.nightAvg!=null) parts.push([s.nightAvg, 1]);
+  if(s.sleepDebt>=3) parts.push([s.sleepDebt>=7 ? 30 : 55, .75]);
+  if(s.energyAvg!=null) parts.push([Math.min(95, s.energyAvg + (s.energyTrend!=null ? Math.max(-15, Math.min(10, s.energyTrend/2)) : 0)), 1]);
+  s.score = parts.length ? Math.round(parts.reduce((a,[v,w])=>a+v*w,0)/parts.reduce((a,[,w])=>a+w,0)) : null;
+  s.level = s.score==null ? null : s.score>=70 ? READY_LEVELS.good : s.score>=50 ? READY_LEVELS.mid : READY_LEVELS.low;
+  return s;
+}
+// Wie reagiert die Energie auf harte Trainingstage? (nächster Morgen nach hoher vs. normaler Last)
+function energyAfterLoad(){
+  const rows = wellnessRows().filter(d=>d.energy!=null); if(rows.length<14) return null;
+  const load = {}; currentActivities().forEach(a=>{ if(a.load) load[a.date]=(load[a.date]||0)+a.load; });
+  const loads = Object.values(load).sort((a,b)=>a-b); if(loads.length<8) return null;
+  const hardMin = loads[Math.floor(loads.length*.75)], scale = energyScale();
+  const hard=[], other=[];
+  rows.forEach(d=>{ const l = load[addDays(d.day,-1)]||0; (l>=hardMin ? hard : other).push(energyPct(d.energy, scale)); });
+  if(hard.length<4 || other.length<4) return null;
+  return { hardMin:Math.round(hardMin), delta:Math.round(mean(hard)-mean(other)), n:hard.length };
+}
+function recoveryPayload(){
+  const s = recoveryStats(7); if(!s) return null;
+  const r1 = (v) => v==null ? null : +v.toFixed(1);
+  return {
+    sleepNeedH: s.need, nights: s.nights, sleepAvgH: r1(s.sleepAvg), sleepBaseH: r1(s.sleepBase), sleepDebtH: r1(s.sleepDebt),
+    sleepScoreAvg: s.sleepScoreAvg!=null ? Math.round(s.sleepScoreAvg) : null,
+    energyAvgPct: s.energyAvg!=null ? Math.round(s.energyAvg) : null, energyBasePct: s.energyBase!=null ? Math.round(s.energyBase) : null,
+    energyTodayPct: s.energyNow ? s.energyNow.pct : null,
+    lastNight: s.lastNight ? { hours:r1(s.lastNight.hours), score:s.lastNight.score ?? null } : null,
+    score: s.score, level: s.level ? s.level.label : null,
+    energyAfterHardDay: energyAfterLoad(),
+    series: s.series,
+  };
+}
+
 /* ================= Tagesform & Feedback ================= */
 function latestWellness(){
   const f = FITNESS_LIVE || [];
-  const rows = f.filter(d=>d.hrv!=null || d.restingHR!=null || d.sleepSecs!=null);
+  const rows = f.filter(d=>d.hrv!=null || d.restingHR!=null || hasRecoveryData(d));
   if(!rows.length) return null;
   const last = rows[rows.length-1];
   if(!last.day || last.day < addDays(todayKey(), -1)) return null; // älter als gestern → nicht aussagekräftig
   const prev = f.filter(d=>d.day < last.day).slice(-7);
   const avg = (k) => { const v=prev.map(d=>d[k]).filter(x=>x!=null); return v.length ? v.reduce((a,b)=>a+b,0)/v.length : null; };
-  return { ...last, hrvBase:avg("hrv"), rhrBase:avg("restingHR") };
+  // Schlaf der letzten Nacht kann auf dem heutigen oder gestrigen Eintrag liegen
+  const sleepRow = [...rows].reverse().find(d=>d.day>=addDays(todayKey(),-1) && (d.sleepSecs || d.sleepScore!=null));
+  const energyRow = [...rows].reverse().find(d=>d.day>=addDays(todayKey(),-1) && d.energy!=null);
+  return { ...last, hrvBase:avg("hrv"), rhrBase:avg("restingHR"),
+    sleepSecs: sleepRow ? sleepRow.sleepSecs : null, sleepScore: sleepRow ? sleepRow.sleepScore : null,
+    sleepQuality: sleepRow ? sleepRow.sleepQuality : null, energy: energyRow ? energyRow.energy : null };
 }
 const READY_LEVELS = {
   good:{ id:"good", label:"Bereit", color:"var(--good)", text:"Gute Voraussetzungen — trainiere wie geplant." },
@@ -1090,8 +1190,14 @@ function readiness(){
     f.push({ label:"HRV", value:`${Math.round(w.hrv)} ms (${signed((r-1)*100,0)} %)`, score: r>=1?90 : r>=.95?75 : r>=.9?55 : 35, weight:1.5 }); }
   if(w && w.restingHR!=null && w.rhrBase){ const d=w.restingHR-w.rhrBase;
     f.push({ label:"Ruhepuls", value:`${Math.round(w.restingHR)} (${signed(d,0)})`, score: d<=0?90 : d<=3?70 : d<=6?50 : 30, weight:1 }); }
-  const sleepH = w && w.sleepSecs ? w.sleepSecs/3600 : (ci && ci.sleepHours ? Number(ci.sleepHours) : null);
-  if(sleepH) f.push({ label:"Schlaf", value:`${fmtNum(sleepH)} h`, score: sleepH>=8?95 : sleepH>=7?80 : sleepH>=6?60 : 35, weight:1 });
+  const sleepHrs = w && w.sleepSecs ? w.sleepSecs/3600 : (ci && ci.sleepHours ? Number(ci.sleepHours) : null);
+  const night = w && (w.sleepScore!=null || w.sleepQuality!=null) ? nightScore({ ...w, sleepSecs: sleepHrs ? sleepHrs*3600 : null }) : null;
+  if(sleepHrs || night!=null) f.push({ label:"Schlaf", value:[sleepHrs ? `${fmtNum(sleepHrs)} h` : null, w && w.sleepScore!=null ? `Score ${Math.round(w.sleepScore)}` : null].filter(Boolean).join(" · "),
+    score: night ?? sleepDurScore(sleepHrs), weight:1.25 });
+  if(w && w.energy!=null){ const p=energyPct(w.energy);
+    f.push({ label:"Energie", value:fmtEnergy(w.energy), score: Math.max(20, Math.min(95, p)), weight:1.25 }); }
+  const rs = recoveryStats(7);
+  if(rs && rs.nights>=3 && rs.sleepDebt>=3) f.push({ label:"Schlafdefizit 7 T", value:`${fmtNum(rs.sleepDebt)} h`, score: rs.sleepDebt>=7 ? 35 : 55, weight:.75 });
   if(ci){ const subj = (ci.sleep + ci.energy + (6-ci.soreness) + (6-ci.stress))/4;
     f.push({ label:"Gefühl", value:`${fmtNum(subj)}/5`, score:Math.round(20 + (subj-1)/4*75), weight:1.5 }); }
   const W = f.reduce((s,x)=>s+x.weight,0);
@@ -1107,13 +1213,23 @@ function feedbackSummary(days=14){
   const notes = items.filter(({w})=>w.feedback).sort((a,b)=>a.k<b.k?1:-1).slice(0,5).map(({w})=>w.feedback);
   return { count:items.length, avgDelta, notes };
 }
-// Umfangs-Anpassung für den Auto-Plan aus RPE-Feedback und Tagesform
+// Umfangs-/Intensitäts-Anpassung für den Auto-Plan aus RPE-Feedback, Tagesform, Schlaf und Energie
 function planAdjustments(){
-  const fb = feedbackSummary(), r = readiness(); let factor = 1; const reasons = [];
+  const fb = feedbackSummary(), r = readiness(), rec = recoveryStats(7); let factor = 1; const reasons = [];
+  let limitIntensity = false, easyUntil = null;
+  const recLow = rec && rec.level && rec.level.id==="low", recMid = rec && rec.level && rec.level.id==="mid";
   if(fb.count>=2 && fb.avgDelta>=1.5){ factor*=.85; reasons.push(`letzte Einheiten fühlten sich härter an als geplant (Ø ${signed(fb.avgDelta)} RPE)`); }
-  else if(fb.count>=3 && fb.avgDelta<=-1.5){ factor*=1.1; reasons.push(`letzte Einheiten fielen leichter als erwartet (Ø ${signed(fb.avgDelta)} RPE)`); }
-  if(r.level.id==="low"){ factor*=.85; reasons.push("Tagesform niedrig"); }
-  return { factor:+factor.toFixed(2), reasons, fb, r };
+  else if(fb.count>=3 && fb.avgDelta<=-1.5 && !recLow && !recMid){ factor*=1.1; reasons.push(`letzte Einheiten fielen leichter als erwartet (Ø ${signed(fb.avgDelta)} RPE)`); }
+  if(r.level.id==="low"){ factor*=.85; reasons.push("Tagesform niedrig"); easyUntil = addDays(todayKey(), 1); }
+  if(recLow){
+    factor*=.85; limitIntensity = true;
+    reasons.push([rec.sleepAvg!=null ? `Schlaf Ø ${fmtNum(rec.sleepAvg)} h` : null, rec.sleepDebt>=3 ? `${fmtNum(rec.sleepDebt)} h Schlafdefizit` : null,
+      rec.energyAvg!=null ? `Energie Ø ${Math.round(rec.energyAvg)} %` : null].filter(Boolean).join(", ") + " in den letzten 7 Tagen — Intensität begrenzt");
+  } else if(recMid && (rec.sleepDebt>=3 || (rec.energyTrend!=null && rec.energyTrend<=-10))){
+    factor*=.93;
+    reasons.push(rec.sleepDebt>=3 ? `leichtes Schlafdefizit (${fmtNum(rec.sleepDebt)} h in 7 Tagen)` : `Energie unter deinem Normalniveau (${signed(rec.energyTrend,0)} %-Punkte)`);
+  }
+  return { factor:+factor.toFixed(2), reasons, fb, r, rec, limitIntensity, easyUntil };
 }
 
 /* ================= Charts ================= */
@@ -1276,10 +1392,54 @@ function drawFtp(el){
   }
   el.innerHTML = s + `</svg>`;
 }
+// Schlaf (Balken, Stunden) + Energie (Linie, 0–100 %) pro Kalendertag
+function drawRecovery(el){
+  const days = Number(el.dataset.days)||14, pre = el.dataset.prefix||"rc", compact = days<=14;
+  const byDay = Object.fromEntries(wellnessRows().map(d=>[d.day, d])), scale = energyScale(), need = sleepNeed();
+  const data = Array.from({length:days}, (_,i)=>{ const k=addDays(todayKey(), i-days+1), d=byDay[k];
+    return { k, h:sleepH(d), score:d ? d.sleepScore : null, e:d ? energyPct(d.energy, scale) : null, raw:d ? d.energy : null }; });
+  const W = Math.max(260, el.clientWidth), H = compact ? 130 : 210, pl = compact ? 8 : 30, pr = compact ? 8 : 30, pt=10, pb=20;
+  const xw=W-pl-pr, slot=xw/days, bw=Math.max(2, Math.min(18, slot*.62));
+  const x = (i)=> pl + slot*(i+.5);
+  const maxH = Math.max(10, need+1, ...data.map(d=>d.h||0));
+  const yH = (h)=> H-pb - h/maxH*(H-pb-pt), yE = (p)=> H-pb - p/100*(H-pb-pt);
+  let s = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Schlaf und Energie der letzten ${days} Tage">`;
+  if(!compact) for(let h=0; h<=maxH; h+=2) s += `<line x1="${pl}" x2="${W-pr}" y1="${yH(h)}" y2="${yH(h)}" style="stroke:var(--line)"/>` + svgText(pl-6, yH(h)+3.5, `${h}h`, "end");
+  if(!compact) [0,50,100].forEach(p=>{ s += `<text x="${W-pr+6}" y="${yE(p)+3.5}" style="font-size:10px;fill:var(--energy)">${p}%</text>`; });
+  data.forEach((d,i)=>{ if(!d.h) return;
+    const c = d.h>=need ? "var(--sleep)" : d.h>=need-1 ? "color-mix(in srgb, var(--sleep) 55%, transparent)" : "var(--warn)";
+    s += `<rect x="${(x(i)-bw/2).toFixed(1)}" y="${yH(d.h).toFixed(1)}" width="${bw.toFixed(1)}" height="${(H-pb-yH(d.h)).toFixed(1)}" rx="${Math.min(3,bw/2)}" style="fill:${c}"/>`; });
+  s += `<line x1="${pl}" x2="${W-pr}" y1="${yH(need)}" y2="${yH(need)}" style="stroke:var(--sleep);stroke-width:1;stroke-dasharray:4 3;opacity:.7"/>`;
+  s += `<text x="${W-pr-2}" y="${yH(need)-4}" text-anchor="end" style="font-size:10px;font-weight:650;fill:var(--sleep);paint-order:stroke;stroke:var(--surface);stroke-width:3px">Bedarf ${fmtNum(need, need%1?1:0)} h</text>`;
+  // Energie-Linie, Lücken unterbrechen die Linie
+  let seg=[]; const flush=()=>{ if(seg.length>1) s += `<polyline points="${seg.join(" ")}" style="fill:none;stroke:var(--energy);stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round"/>`; seg=[]; };
+  data.forEach((d,i)=>{ if(d.e==null) flush(); else seg.push(`${x(i).toFixed(1)},${yE(d.e).toFixed(1)}`); }); flush();
+  data.forEach((d,i)=>{ if(d.e!=null && (compact || days<=42)) s += `<circle cx="${x(i).toFixed(1)}" cy="${yE(d.e).toFixed(1)}" r="${compact?2.6:2.2}" style="fill:var(--energy);stroke:var(--surface);stroke-width:1.5"/>`; });
+  const every = Math.max(1, Math.ceil(days / (W<520 ? 6 : compact ? 14 : 10)));
+  data.forEach((d,i)=>{ if((days-1-i)%every===0) s += svgText(x(i), H-5, compact ? WEEKDAYS[dow(fromKey(d.k))] : fmtMMDD(d.k.slice(5))); });
+  s += `<line id="${pre}-xl" y1="${pt}" y2="${H-pb}" style="display:none;stroke:var(--line-strong);stroke-dasharray:3 3"/>`;
+  el.innerHTML = s + `</svg>`;
+
+  const last = data.map((d,i)=>[d,i]).filter(([d])=>d.h||d.e!=null).pop();
+  const show = (i)=>{ const d=data[i]; if(!d) return;
+    setText(`${pre}-h`, d.h ? fmtDur(d.h*60) : "–"); setText(`${pre}-s`, d.score!=null ? Math.round(d.score) : "–");
+    setText(`${pre}-e`, fmtEnergy(d.raw, scale)); setText(`${pre}-d`, d.k===todayKey() ? "Heute" : fmtShort(d.k)); };
+  if(last) show(last[1]);
+  const xl = el.querySelector(`#${pre}-xl`);
+  el.onpointermove = (e)=>{ const r=el.getBoundingClientRect(); const i=Math.min(days-1, Math.max(0, Math.floor((e.clientX-r.left-pl)/slot)));
+    xl.style.display=""; xl.setAttribute("x1",x(i)); xl.setAttribute("x2",x(i)); show(i); };
+  el.onpointerleave = ()=>{ xl.style.display="none"; if(last) show(last[1]); };
+}
+const recoveryLegend = (pre) => `<div class="chart-legend">
+  <div><span class="l"><i style="background:var(--sleep)"></i>Schlaf</span><span class="v num" id="${pre}-h"></span></div>
+  <div><span class="l"><i style="background:var(--faint)"></i>Schlafscore</span><span class="v num" id="${pre}-s"></span></div>
+  <div><span class="l"><i style="background:var(--energy)"></i>Energie</span><span class="v num" id="${pre}-e"></span></div>
+  <span class="date" id="${pre}-d"></span></div>`;
 function drawCharts(){
   document.querySelectorAll("[data-chart='pmc']").forEach(drawPMC);
   document.querySelectorAll("[data-chart='power']").forEach(drawPower);
   document.querySelectorAll("[data-chart='ftp']").forEach(drawFtp);
+  document.querySelectorAll("[data-chart='recovery']").forEach(drawRecovery);
 }
 let resizeT; window.addEventListener("resize", ()=>{ clearTimeout(resizeT); resizeT=setTimeout(drawCharts, 120); });
 
@@ -1352,6 +1512,7 @@ function viewToday(){
       </section>
       <div class="stack-v">
         ${readinessCard()}
+        ${recoveryCard()}
         <section class="card">
           <div class="card-head"><h2>Heute</h2><span class="grow"></span>
             ${wx ? `<span class="pill">${icon(wxIcon(wx),14)}${Math.round(wx.high)}° · ${wx.precip} %</span>` : ""}
@@ -1398,9 +1559,48 @@ function readinessCard(){
       <div><div style="font-size:18px; font-weight:750; color:${r.level.color}">${r.level.label}</div><p class="muted" style="margin-top:2px">${r.level.text}</p></div>
     </div>
     <div class="factors">${r.factors.map(f=>`<span class="factor">${f.label} <b>${f.value}</b></span>`).join("")}</div>
-    ${!r.hasCheckin && !r.hasWellness ? `<p class="muted" style="font-size:13px; margin-top:10px">Bisher nur aus der Form geschätzt — ein kurzer Check-in (oder HRV/Schlaf aus intervals.icu) macht die Einschätzung genauer.</p>` : ""}
+    ${!r.hasCheckin && !r.hasWellness ? `<p class="muted" style="font-size:13px; margin-top:10px">Bisher nur aus der Form geschätzt — ein kurzer Check-in (oder HRV, Schlaf und Energie aus intervals.icu) macht die Einschätzung genauer.</p>` : ""}
     ${cand ? `<div class="hint" style="--hc:${r.level.color}">${icon("heart",18)}<div>„${esc(cand.title)}“ ist heute ${r.level.id==="low" ? "wahrscheinlich zu viel" : "recht intensiv"}.<br>
       <button class="btn sm secondary" onclick="easeWorkout(${cand.id}, '${tk}')">Einheit entschärfen</button></div></div>` : ""}
+  </section>`;
+}
+function recoveryCard(){
+  const s = recoveryStats(7); if(!s) return "";
+  const ln = s.lastNight, en = s.energyNow, ea = energyAfterLoad();
+  const tile = (k, v, sub, color) => `<div class="mini"><div class="k">${k}</div><div class="v num"${color?` style="color:${color}"`:""}>${v}</div>${sub?`<div class="s">${sub}</div>`:""}</div>`;
+  const trend = s.energyTrend!=null && Math.abs(s.energyTrend)>=5 ? ` · ${signed(s.energyTrend,0)} vs. normal` : "";
+  return `<section class="card">
+    <div class="card-head"><h2>Schlaf & Energie</h2>${s.level ? `<span class="pill" style="color:${s.level.color}">${icon("moon",13,2.2)}Erholung ${s.score}/100</span>` : ""}</div>
+    <div class="tiles" style="margin-top:4px">
+      ${tile("Letzte Nacht", ln && ln.hours ? fmtDur(ln.hours*60) : "–", ln ? [ln.score!=null ? `Score ${Math.round(ln.score)}` : null, ln.hr ? `${Math.round(ln.hr)} bpm` : null].filter(Boolean).join(" · ") : "keine Daten",
+        ln && ln.hours ? (ln.hours>=s.need ? "var(--sleep)" : ln.hours<s.need-1 ? "var(--warn)" : null) : null)}
+      ${tile("Energie", en ? fmtEnergy(en.raw, s.scale) : "–", s.energyAvg!=null ? `Ø 7 T ${Math.round(s.energyAvg)} %${trend}` : "", en ? "var(--energy)" : null)}
+      ${tile("Schlaf Ø 7 T", s.sleepAvg!=null ? `${fmtNum(s.sleepAvg)} h` : "–", s.nights ? (s.sleepDebt>=1 ? `${fmtNum(s.sleepDebt)} h Defizit` : "Bedarf gedeckt") : "", s.sleepDebt>=5 ? "var(--warn)" : null)}
+    </div>
+    <div style="margin-top:14px">${recoveryLegend("rt")}<div class="chart" data-chart="recovery" data-days="14" data-prefix="rt"></div></div>
+    ${s.level && s.level.id!=="good" ? `<div class="hint" style="--hc:${s.level.color}">${icon("moon",18)}<div>${s.level.id==="low"
+      ? "Schlaf und Energie waren diese Woche deutlich unter deinem Bedarf. Der Auto-Plan verzichtet deshalb auf harte Intervalle und nimmt den Umfang zurück."
+      : "Deine Erholung ist etwas eingeschränkt — früher ins Bett und harte Einheiten mit Bedacht setzen."}</div></div>` : ""}
+    ${ea && ea.delta<=-8 ? `<p class="muted" style="font-size:13px; margin-top:10px">Nach harten Tagen (≥ ${ea.hardMin} TSS) liegt deine Energie am nächsten Morgen im Schnitt ${Math.abs(ea.delta)} %-Punkte niedriger.</p>` : ""}
+  </section>`;
+}
+function recoveryProgressCard(){
+  const days = state.fitRange, s = recoveryStats(days);
+  if(!s) return `<section class="card"><div class="card-head"><h2>Schlaf & Energie</h2></div>
+    <p class="muted">Noch keine Schlaf- oder Energiedaten von intervals.icu. Sobald sie dort ankommen (z. B. über Garmin, Oura oder Whoop), erscheinen sie hier nach einem Sync.</p></section>`;
+  const ea = energyAfterLoad();
+  return `<section class="card">
+    <div class="card-head" style="margin-bottom:10px"><h2>Schlaf & Energie</h2><span class="pill">${days===42 ? "6 Wochen" : "3 Monate"}</span></div>
+    ${recoveryLegend("rp")}
+    <div class="chart" data-chart="recovery" data-days="${days}" data-prefix="rp"></div>
+    <div class="legend"><span><i style="background:var(--sleep)"></i>Schlaf ≥ Bedarf</span><span><i style="background:color-mix(in srgb, var(--sleep) 55%, transparent)"></i>bis 1 h darunter</span><span><i style="background:var(--warn)"></i>> 1 h zu wenig</span><span><i style="background:var(--energy)"></i>Energie (0–100 %)</span></div>
+    <div class="tiles">
+      <div class="mini"><div class="k">Schlaf Ø</div><div class="v num">${s.sleepAvg!=null ? `${fmtNum(s.sleepAvg)} h` : "–"}</div><div class="s">${s.nights} Nächte erfasst</div></div>
+      <div class="mini"><div class="k">Schlafscore Ø</div><div class="v num">${s.sleepScoreAvg!=null ? Math.round(s.sleepScoreAvg) : "–"}</div></div>
+      <div class="mini"><div class="k">Energie Ø</div><div class="v num" style="color:var(--energy)">${s.energyAvg!=null ? `${Math.round(s.energyAvg)} %` : "–"}</div></div>
+      <div class="mini"><div class="k">Nächte ≥ ${fmtNum(s.need, s.need%1?1:0)} h</div><div class="v num">${s.nights ? `${Math.round(s.series.filter(d=>d.sleepH>=s.need).length/s.nights*100)} %` : "–"}</div></div>
+    </div>
+    ${ea && Math.abs(ea.delta)>=5 ? `<div class="hint" style="--hc:var(--energy)">${icon("battery",18)}<div>Nach harten Tagen (≥ ${ea.hardMin} TSS) liegt deine Energie am nächsten Morgen im Schnitt <b>${ea.delta>0?"+":""}${ea.delta} %-Punkte</b> ${ea.delta<0 ? "niedriger" : "höher"} als sonst (${ea.n} Tage ausgewertet).${ea.delta<=-10 ? " Plane nach solchen Tagen bewusst einen lockeren Tag ein." : ""}</div></div>` : ""}
   </section>`;
 }
 function todayWorkout(w, key, wx){
@@ -1625,6 +1825,7 @@ function viewProgress(){
       <div class="card stat"><div class="stat-lbl">Form</div><div class="stat-val num">${signed(c.tsb)}</div>
         <div class="stat-foot" style="color:${fs.color}; font-weight:650">${fs.label}</div></div>
     </div>
+    ${recoveryProgressCard()}
     ${seasonCard()}
     <div class="grid-2">
       <section class="card">
@@ -1744,7 +1945,7 @@ function openCheckin(){
 function openSettings(){
   const s = state.settings;
   state.modal = { type:"settings", ftp:s.ftp, hrMax:s.hrMax, raceName:(s.race&&s.race.name)||"", raceDate:(s.race&&s.race.date)||"", raceType:(s.race&&s.race.type)||"",
-    location:s.location||DEFAULT_LOCATION, locQuery:"", locResults:null };
+    sleepNeed:s.sleepNeed||"", location:s.location||DEFAULT_LOCATION, locQuery:"", locResults:null };
   renderModal();
 }
 const setM = (k, v) => { state.modal[k] = v; };
@@ -1801,6 +2002,10 @@ function renderSettingsModal(m){
     </div>
     <div id="zone-tables">${zoneTables(m.ftp, m.hrMax)}</div>
 
+    <div class="section-title">Erholung</div>
+    <label><span class="lbl">Schlafbedarf (Stunden pro Nacht)</span><input class="input" type="number" step="0.5" min="5" max="11" inputmode="decimal" value="${esc(m.sleepNeed)}" placeholder="8" oninput="setM('sleepNeed', this.value)"></label>
+    <p class="muted" style="font-size:13px; margin-top:6px">Maßstab für Schlafdefizit, Tagesform und Auto-Plan. Schlaf und Energie kommen aus den Wellness-Daten von intervals.icu.</p>
+
     <div class="section-title">Saisonziel</div>
     <label><span class="lbl">Wettkampf</span><input class="input" value="${esc(m.raceName)}" placeholder="z. B. Chiemsee Triathlon" oninput="setM('raceName', this.value)"></label>
     <div class="two">
@@ -1846,6 +2051,7 @@ function saveSettings(){
   const m = state.modal, s = state.settings, oldFtp = Number(s.ftp)||0, newFtp = Number(m.ftp)||0;
   const locChanged = !s.location || m.location.lat!==s.location.lat || m.location.lon!==s.location.lon;
   s.ftp = m.ftp; s.hrMax = m.hrMax;
+  const need = Number(String(m.sleepNeed||"").replace(",", ".")); s.sleepNeed = need>=4 && need<=12 ? need : "";
   if(newFtp && newFtp!==oldFtp) s.ftpHistory = [...(s.ftpHistory||[]).filter(h=>h.date!==todayKey()), { date:todayKey(), ftp:newFtp }];
   s.race = { name:m.raceName.trim(), date:m.raceDate, type:m.raceType };
   s.location = m.location;
@@ -2035,8 +2241,13 @@ function renderWizardModal(){
         <div class="mini" style="background:var(--surface)"><div class="k">Fitness</div><div class="v num">${fmtNum(c.ctl)}</div></div>
         <div class="mini" style="background:var(--surface)"><div class="k">Form</div><div class="v num">${signed(c.tsb)}</div></div>
         <div class="mini" style="background:var(--surface)"><div class="k">Tagesform</div><div class="v num" style="color:${adj.r.level.color}">${adj.r.score}</div></div>
+        ${adj.rec && adj.rec.level ? `<div class="mini" style="background:var(--surface)"><div class="k">Erholung 7 T</div><div class="v num" style="color:${adj.rec.level.color}">${adj.rec.score}</div></div>` : ""}
       </div>
     </div>
+    ${adj.rec ? `<div class="note"><div class="k">${icon("moon",14,2.2)}Schlaf & Energie (7 Tage)</div>${[
+      adj.rec.sleepAvg!=null ? `Schlaf Ø ${fmtNum(adj.rec.sleepAvg)} h (Bedarf ${fmtNum(adj.rec.need, adj.rec.need%1?1:0)} h${adj.rec.sleepDebt>=1 ? `, ${fmtNum(adj.rec.sleepDebt)} h Defizit` : ""})` : null,
+      adj.rec.energyAvg!=null ? `Energie Ø ${Math.round(adj.rec.energyAvg)} %${adj.rec.energyTrend!=null ? ` (${signed(adj.rec.energyTrend,0)} ggü. deinem Normalwert)` : ""}` : null,
+    ].filter(Boolean).join(" · ")}${adj.limitIntensity ? " — der Plan verzichtet auf harte Intervalle." : ""}</div>` : ""}
     <div class="note"><div class="k">${icon("target",14,2.2)}Phase: ${phase.label}</div>${phase.note}</div>
     ${adj.fb.count ? `<div class="note"><div class="k">${icon("heart",14,2.2)}Dein Feedback (14 Tage)</div>${adj.fb.count} Einheiten bewertet, im Schnitt ${signed(adj.fb.avgDelta)} RPE gegenüber dem Erwarteten.</div>` : ""}
     ${adj.factor!==1 ? `<div class="hint" style="--hc:var(--sst)">${icon("sliders",18)}<div>Der Umfang wird um ${signed((adj.factor-1)*100,0)} % angepasst: ${adj.reasons.join(", ")}.</div></div>` : ""}
@@ -2068,7 +2279,7 @@ function renderWizardModal(){
 
   if(state.wizardStep===3 && state.wizardLoading) return `${head}
     <div style="text-align:center; padding:40px 0"><div class="icon-btn spin" style="margin:0 auto 14px">${icon("spark",20)}</div>
-    <b>Claude erstellt deinen Plan …</b><p class="muted" style="margin-top:4px">Berücksichtigt Saisonphase, Form, Tagesform, Feedback und Wetter.</p></div>`;
+    <b>Claude erstellt deinen Plan …</b><p class="muted" style="margin-top:4px">Berücksichtigt Saisonphase, Form, Tagesform, Schlaf, Energie, Feedback und Wetter.</p></div>`;
 
   if(state.wizardStep===3 && state.wizardError) return `${head}
     <div class="warn-box">${esc(state.wizardError)}</div>
@@ -2123,7 +2334,8 @@ async function wizardGenerate(useClaude){
       ctl: CURR().ctl, atl: CURR().atl, tsb: CURR().tsb,
       phaseLabel: phase.label, phaseNote: phase.note,
       season: seasonPayload(),
-      readiness: { score:adj.r.score, level:adj.r.level.label },
+      readiness: { score:adj.r.score, level:adj.r.level.label, factors:adj.r.factors.map(f=>`${f.label} ${f.value}`) },
+      recovery: recoveryPayload(),
       feedback: adj.fb,
       lastWeek: { planned:lastWeek.n, done:lastWeek.done, compliance:lastWeek.compliance ?? 0 },
     };
@@ -2314,7 +2526,12 @@ async function generateReview(wk){
           actualMin:(MATCH.wm.get(w.id)||{}).min ?? null, rpe:w.rpe||null, feel:w.feel||null, feedback:w.feedback||"" })),
         unplanned: (MATCH.unplanned[k]||[]).map(a=>({ name:a.name, min:a.min, km:a.km, load:a.load })),
         checkin: (state.journal.checkins||{})[k] || null,
+        wellness: (()=>{ const w=wellnessRows().find(r=>r.day===k); return w && hasRecoveryData(w) ? { sleepH:sleepH(w) ? +sleepH(w).toFixed(1) : null,
+          sleepScore:w.sleepScore ?? null, energyPct:energyPct(w.energy) } : null; })(),
       }; }),
+      recovery: (()=>{ const rows=days.map(d=>wellnessRows().find(r=>r.day===iso(d))).filter(Boolean);
+        const sh=mean(rows.map(sleepH)), en=mean(rows.map(r=>energyPct(r.energy)));
+        return sh==null && en==null ? null : { sleepNeedH:sleepNeed(), sleepAvgH:sh!=null ? +sh.toFixed(1) : null, energyAvgPct:en!=null ? Math.round(en) : null }; })(),
     };
     const res = await fetchJSON(`${API}/weekly-review`, { method:"POST", headers:JSON_H, body:JSON.stringify(payload) });
     state.journal.reviews = { ...(state.journal.reviews||{}), [wk]: { ...res, createdAt:new Date().toISOString() } };

@@ -1,7 +1,7 @@
 // Service Worker: Offline-Fähigkeit + Push-Erinnerungen.
 // App-Shell: network-first (Updates kommen sofort an), bei Offline aus dem Cache.
 // GET-Requests an Functions und Wetter: network-first mit Cache-Fallback.
-const CACHE = "training-v2";
+const CACHE = "training-v3";
 const SHELL = ["/", "/index.html", "/manifest.webmanifest", "/icon-192.png", "/apple-touch-icon.png"];
 
 self.addEventListener("install", (e) => {

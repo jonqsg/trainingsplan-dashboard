@@ -338,6 +338,12 @@
   .mini { background:var(--surface-2); border-radius:14px; padding:10px 12px; }
   .mini .k { font-size:12px; color:var(--sub); font-weight:600; }
   .mini .v { font-size:18px; font-weight:750; margin-top:2px; }
+  .guide ol { margin:4px 0 0; padding-left:20px; font-size:14px; line-height:1.5; }
+  .guide li { margin-top:8px; }
+  .guide .input { font-size:13px; }
+  .upload-card { display:flex; gap:12px; align-items:center; padding:14px 16px; margin-bottom:14px; }
+  .upload-card > div { flex:1; }
+  @media (max-width:520px) { .upload-card { flex-wrap:wrap; } .upload-card .btn { width:100%; } }
   .zbar { display:grid; grid-template-columns:28px 1fr auto; gap:8px; align-items:center; font-size:12px; margin-top:6px; }
   .zbar .zl { font-weight:650; color:var(--sub); }
   .zbar .zt { height:8px; border-radius:4px; background:var(--surface); overflow:hidden; }
@@ -1666,7 +1672,7 @@ function activityRow(a){
   return `<button class="row-item" onclick="openActivity(${idx})">
     <span class="tile" style="background:${d.color}">${icon(d.icon,18)}</span>
     <span class="ri-main"><div class="ri-title">${esc(actName(a))}</div>
-      <div class="ri-meta"><span>${relDate(a.date)}</span>${a.min ? `<span>${fmtDur(a.min)}</span>` : a.stub ? `<span>Strava · nicht verbunden</span>` : ""}${a.elev?`<span>${a.elev} Hm</span>`:""}${a.hr?`<span>♥ ${Math.round(a.hr)}</span>`:""}${a.watts?`<span>${Math.round(a.watts)} W</span>`:""}
+      <div class="ri-meta"><span>${relDate(a.date)}</span>${a.min ? `<span>${fmtDur(a.min)}</span>` : a.stub ? `<span style="color:var(--info); font-weight:650">FIT hochladen</span>` : ""}${a.elev?`<span>${a.elev} Hm</span>`:""}${a.hr?`<span>♥ ${Math.round(a.hr)}</span>`:""}${a.watts?`<span>${Math.round(a.watts)} W</span>`:""}
       ${link?`<span style="color:var(--good); font-weight:650">✓ Plan</span>`:""}</div></span>
     <span class="ri-side">${a.km ? `<b class="num">${fmtNum(a.km)} km</b>` : link && a.stub ? `<b class="num">${fmtDur(link.w.duration)}</b>` : ""}${a.load!=null?`${a.load} TSS`:""}</span>
   </button>`;
@@ -1930,6 +1936,11 @@ function viewActivities(){
   const sum=(k)=>recent.reduce((s,a)=>s+(Number(a[k])||0),0);
   return `
     ${topbar("Aktivitäten", FITNESS_LIVE ? "Aus intervals.icu" : "Beispieldaten · mit intervals.icu synchronisieren")}
+    <div class="card upload-card">
+      <span class="tile" style="background:var(--accent)">${icon("upload",18)}</span>
+      <div style="min-width:0"><b>Fahrt als FIT-Datei hochladen</b><p class="muted" style="font-size:13px; margin-top:2px">${FIT_HELP}</p></div>
+      <button class="btn sm" onclick="pickFit()">Auswählen</button>
+    </div>
     <div class="stats">
       <div class="card stat"><div class="stat-lbl">30 Tage · Distanz</div><div class="stat-val num">${fmtNum(sum("km"),0)}<small>km</small></div></div>
       <div class="card stat"><div class="stat-lbl">30 Tage · Zeit</div><div class="stat-val num">${fmtDur(sum("min"))}</div></div>
@@ -2058,6 +2069,9 @@ function renderSettingsModal(m){
       ${!m.strava ? `<span class="muted" style="font-size:13px">…</span>` : m.strava.connected
         ? `<button class="btn xs secondary" onclick="disconnectStrava()">Trennen</button>`
         : `<a class="btn xs ${m.strava.configured ? "" : "secondary"}" href="${API}/strava-auth" ${m.strava.configured ? "" : `onclick="return false" aria-disabled="true" style="opacity:.5"`}>Verbinden</a>`}</div>
+    <div class="set-row"><div class="t">iPhone: Fahrten direkt aus OnelapFit teilen<small>iOS erlaubt Web-Apps nicht im Teilen-Menü — ein Kurzbefehl übernimmt das und lädt die FIT-Datei zu intervals.icu hoch.</small>
+      <button class="btn xs secondary" style="margin-top:8px" onclick="state.modal.showShortcut=!state.modal.showShortcut; renderModal()">${state.modal && state.modal.showShortcut ? "Anleitung ausblenden" : "Anleitung anzeigen"}</button></div></div>
+    ${m.showShortcut ? shortcutGuide() : ""}
     <div class="set-row"><div class="t">Automatisch an intervals.icu senden<small>Neue und verschobene Workouts landen als strukturiertes Workout im Kalender — und von dort auf Garmin, Wahoo oder Zwift.</small></div>
       ${sw(s.autoPush, "toggleSetting('autoPush', this.checked)")}</div>
     <div class="set-row"><div class="t">Tägliche Erinnerung<small>Push-Nachricht um ca. 7 Uhr mit den Einheiten des Tages. Auf dem iPhone: App zum Home-Bildschirm hinzufügen und von dort öffnen.</small>
@@ -2070,6 +2084,25 @@ function renderSettingsModal(m){
       <label class="btn secondary sm file-btn">${icon("upload",16)}Importieren<input type="file" accept=".json,application/json" onchange="importData(event)"></label>
     </div>
     <div class="sheet-foot"><button class="btn block" onclick="saveSettings()">Speichern</button></div>`;
+}
+const UPLOAD_URL = () => `${location.origin}${API}/intervals-upload`;
+function shortcutGuide(){
+  return `<div class="panel guide">
+    <div class="panel-title">Kurzbefehl „An Trainings-Dashboard“ <span>einmalig, ca. 2 min</span></div>
+    <ol>
+      <li>App <b>Kurzbefehle</b> öffnen → <b>+</b> → oben den Namen auf <b>An Trainings-Dashboard</b> setzen.</li>
+      <li>Unten auf <b>ⓘ</b> (Details) → <b>Im Share-Sheet anzeigen</b> einschalten. Oben bei „Empfängt“ nur <b>Dateien</b> auswählen.</li>
+      <li>Aktion <b>Inhalt von URL abrufen</b> hinzufügen. Als URL diese Adresse einfügen:
+        <div class="inline-row" style="margin:8px 0"><input class="input" readonly value="${esc(UPLOAD_URL())}" onclick="this.select()"><button class="btn secondary sm" onclick="copyUploadUrl()">${icon("copy",15)}Kopieren</button></div>
+        Auf den Pfeil <b>›</b> tippen: Methode <b>POST</b>, Anfragetext <b>Datei</b>, Datei = <b>Kurzbefehleingabe</b>.</li>
+      <li>Aktion <b>Benachrichtigung anzeigen</b> hinzufügen und als Text <b>Inhalt von URL</b> wählen.</li>
+    </ol>
+    <p class="muted" style="font-size:13px; margin-top:8px">Nutzen: In OnelapFit Fahrt öffnen → Teilen → „Share Fit“ → <b>An Trainings-Dashboard</b>. Die Fahrt landet vollständig in intervals.icu, ein leerer Strava-Eintrag mit gleicher Startzeit wird automatisch ersetzt. Danach im Dashboard synchronisieren.</p>
+  </div>`;
+}
+function copyUploadUrl(){
+  const u = UPLOAD_URL();
+  (navigator.clipboard ? navigator.clipboard.writeText(u) : Promise.reject()).then(()=>toast("Adresse kopiert")).catch(()=>toast("Bitte Adresse im Feld markieren und kopieren"));
 }
 async function disconnectStrava(){
   if(!confirm("Verbindung zu Strava trennen?")) return;
@@ -2485,6 +2518,56 @@ function renderDetailModal(m){
     <div class="sheet-foot">${st.kind==="matched" ? `<button class="btn block secondary" onclick="closeModal()">Schließen</button>`
       : `<button class="btn block ${w.done?"secondary":"good"}" onclick="toggleDone(${w.id}, '${m.dateKey}')">${icon(w.done?"x":"check",18,2.4)}${w.done?"Als offen markieren":"Als erledigt markieren"}</button>`}</div>`;
 }
+/* ---------- FIT-Upload (z. B. "Share Fit" aus OnelapFit) ---------- */
+const FIT_HELP = "In OnelapFit: Ich → Aktivitäten → Fahrt öffnen → Teilen → „Share Fit“ → „In Dateien sichern“. Dann hier die Datei auswählen. Schneller: Kurzbefehl einrichten (Einstellungen → Integrationen).";
+const FIT_OK = /\.(fit|fit\.gz|gpx|gpx\.gz|tcx|tcx\.gz|zip)$/i;
+// Kein accept-Filter: iOS kennt keinen MIME-Typ für .fit und würde die Dateien sonst ausgrauen
+function pickFit(stubIdx=null){
+  // Im DOM verankert, weil ältere iOS-Versionen den Dateidialog sonst nicht öffnen
+  const inp = document.createElement("input"); inp.type = "file"; inp.style.display = "none";
+  inp.onchange = () => { if(inp.files && inp.files[0]) uploadFit(inp.files[0], stubIdx); inp.remove(); };
+  document.body.appendChild(inp);
+  inp.click();
+}
+function bufToB64(buf){
+  const b = new Uint8Array(buf); let s = "";
+  for(let i=0; i<b.length; i+=0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i+0x8000));
+  return btoa(s);
+}
+async function gzip(buf){
+  if(typeof CompressionStream === "undefined") return null;
+  try { return await new Response(new Blob([buf]).stream().pipeThrough(new CompressionStream("gzip"))).arrayBuffer(); } catch { return null; }
+}
+async function uploadFit(file, stubIdx=null){
+  if(!FIT_OK.test(file.name)){ toast("Bitte eine .fit-Datei auswählen", "err"); return; }
+  if(state.uploading) return;
+  const stub = stubIdx!=null ? currentActivities()[stubIdx] : null;
+  const link = stub && MATCH.aw ? MATCH.aw.get(stub) : null;
+  state.uploading = true; toast("FIT-Datei wird hochgeladen …");
+  try {
+    let buf = await file.arrayBuffer(), filename = file.name;
+    // .fit vor dem Upload komprimieren (intervals.icu nimmt .fit.gz) — hält die Anfrage klein
+    if(/\.(fit|gpx|tcx)$/i.test(filename)){ const gz = await gzip(buf); if(gz && gz.byteLength < buf.byteLength){ buf = gz; filename += ".gz"; } }
+    if(buf.byteLength > 4.2*1024*1024) throw new Error("Datei ist zu groß (max. ca. 4 MB)");
+    const res = await fetchJSON(`${API}/intervals-upload`, { method:"POST", headers:JSON_H, body: JSON.stringify({
+      filename, data: bufToB64(buf),
+      name: link ? link.w.title : undefined,
+      pairedEventId: link && link.w.eventId!=null ? link.w.eventId : (stub && stub.pairedEventId!=null ? stub.pairedEventId : undefined),
+      stubId: stub ? stub.id : undefined,
+    }) });
+    if(res.stubRemains && confirm("Hochgeladen ✓\n\nDer leere Strava-Eintrag dieser Fahrt ist in intervals.icu noch vorhanden — dann zählt die Trainingslast doppelt. Strava-Eintrag entfernen?")){
+      await fetchJSON(`${API}/intervals-upload?activityId=${encodeURIComponent(stub.id)}`, { method:"DELETE" })
+        .catch(e=>toast("Strava-Eintrag konnte nicht entfernt werden: " + e.message, "err"));
+    }
+    if(state.modal && state.modal.type==="activity") closeModal();
+    toast("Fahrt hochgeladen — wird synchronisiert");
+    // intervals.icu analysiert die Datei asynchron → kurz warten, dann neu laden
+    setTimeout(()=>syncFromIntervals(false), 2500);
+  } catch(e) {
+    toast("Upload fehlgeschlagen: " + e.message, "err");
+  }
+  state.uploading = false;
+}
 /* ---------- Aktivität: Detailseite ---------- */
 const ACT_DETAIL = {}; // Cache für Intervalle je Aktivität (lazy geladen)
 function openActivity(idx){
@@ -2528,9 +2611,10 @@ function renderActivityModal(m){
       <h3 style="font-size:24px; font-weight:750; letter-spacing:-.02em; margin-top:12px">${esc(actName(a))}</h3>
       <div class="sheet-sub">${fmtDay(a.date)}${time ? ` · ${time} Uhr` : ""} · ${d.label}${a.device ? ` · ${esc(a.device)}` : a.source ? ` · ${esc(a.source)}` : ""}</div>
     </div>
-    ${a.stub ? `<div class="hint" style="--hc:var(--info)">${icon("link",18)}<div>Diese Aktivität kommt über <b>Strava</b>. intervals.icu darf Strava-Daten laut deren Nutzungsbedingungen nicht per API weitergeben — das Dashboard sieht nur, dass es sie gibt.
-      ${w ? " Dauer und Last werden deshalb aus dem geplanten Workout übernommen." : ""}<br>
-      <button class="btn sm secondary" onclick="openSettings()">${icon("link",15)}Strava in den Einstellungen verbinden</button></div></div>` : ""}
+    ${a.stub ? `<div class="hint" style="--hc:var(--info)">${icon("upload",18)}<div>Diese Fahrt kommt über <b>Strava</b> — intervals.icu gibt dafür keine Werte per API heraus${w ? ", Dauer und Last stammen deshalb aus dem Plan" : ""}.
+      Lade die FIT-Datei hoch, dann ersetzt intervals.icu den Eintrag durch die vollständigen Daten.<br>
+      <span class="muted" style="font-size:13px">${FIT_HELP}</span><br>
+      <button class="btn sm" onclick="pickFit(${m.idx})">${icon("upload",15)}FIT-Datei hochladen</button></div></div>` : ""}
     ${a.viaStrava ? `<div class="note"><div class="k">${icon("link",14,2.2)}Daten direkt von Strava</div>intervals.icu gibt Strava-Aktivitäten nicht per API heraus — die Werte kommen deshalb direkt von Strava.${a.loadEstimated ? " Die Last ist aus Leistung und FTP geschätzt." : a.load==null ? " Ohne Leistungsmesser gibt es keine Last von Strava; angezeigt wird die Tageslast aus intervals.icu." : ""}</div>` : ""}
     <div class="tiles">
       ${tile("Dauer", a.min ? fmtDur(a.min) : w ? `≈ ${fmtDur(w.duration)}` : "–")}

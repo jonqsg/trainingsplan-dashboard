@@ -25,6 +25,7 @@ netlify/functions/
   intervals-fitness.js     → Proxy: CTL/ATL/TSB + Wellness (HRV, Ruhepuls, Schlaf, Schlafscore, Energie/Body Battery) von intervals.icu
   intervals-activities.js  → Proxy: Aktivitäten inkl. Leistung, eFTP und Paarung mit Kalender-Events
   intervals-activity.js    → Proxy: Details einer Aktivität (Intervalle bzw. Strava-Runden) für die Detailseite
+  intervals-upload.js      → FIT-Upload zu intervals.icu (+ Entfernen verbliebener Strava-Stubs)
   strava-auth.js           → einmalige Strava-Verbindung (OAuth), Status und Trennen
   lib/strava.js            → Strava-API-Client (Token-Erneuerung, Aktivitäten mit Cache)
   intervals-power-curve.js → Proxy: Leistungskurve (Bestwerte je Dauer)
@@ -153,7 +154,22 @@ heraus. Ist Strava wie unten beschrieben verbunden, ergänzt `intervals-activiti
 mit den Werten aus der Strava-API (Zuordnung über die Startzeit). Ohne Verbindung übernimmt das Dashboard
 Dauer/Last aus dem Plan.
 
-### Strava verbinden (optional)
+### FIT-Datei hochladen (ohne Strava-Abo)
+
+Die Strava-API ist nur mit Abo nutzbar. Ohne Abo bekommt man die vollständigen Daten, indem man die
+Original-FIT-Datei hochlädt — hochgeladene Dateien liefert die intervals.icu-API komplett aus, und
+intervals.icu ersetzt dabei normalerweise den leeren Strava-Eintrag.
+
+- **iPhone (OnelapFit/Magene):** Ich → Aktivitäten → Fahrt öffnen → Teilen → „Share Fit“ →
+  „In Dateien sichern“. Dann im Dashboard die Fahrt antippen → „FIT-Datei hochladen“ (verknüpft sie mit
+  dem geplanten Workout) oder im Reiter Aktivitäten → „Auswählen“.
+- Die Datei wird vor dem Upload im Browser gzip-komprimiert (max. ca. 4 MB).
+- Bleibt der Strava-Eintrag in intervals.icu trotzdem bestehen, bietet das Dashboard an, ihn zu
+  entfernen — sonst zählt die Trainingslast doppelt. Entfernt werden nur Strava-Einträge ohne Daten.
+- Ältere Fahrten gesammelt: Strava-Datenarchiv (Strava → Einstellungen → Mein Konto → „Konto
+  herunterladen oder löschen“) in intervals.icu importieren.
+
+### Strava verbinden (optional, nur mit Strava-Abo)
 
 1. Auf https://www.strava.com/settings/api eine eigene API-Anwendung anlegen:
    - *Application Name*: beliebig, z. B. „Trainingsdashboard“

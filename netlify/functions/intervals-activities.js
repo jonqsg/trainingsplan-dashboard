@@ -33,6 +33,7 @@ exports.handler = async (event) => {
     const raw = Array.isArray(data) ? data : [];
     let mapped = raw.map((a) => mapActivity(a, eventByActivity[String(a.id)]));
     mapped = await enrichFromStrava(event, mapped, raw, Number(q.ftp) || null);
+    mapped = dropReplacedStubs(mapped);
     mapped.sort((x, y) => (x.start < y.start ? 1 : -1));
 
     return { statusCode: 200, headers: cors(), body: JSON.stringify(mapped) };
@@ -108,6 +109,17 @@ async function enrichFromStrava(event, mapped, raw, ftp) {
     console.warn("Strava-Anreicherung fehlgeschlagen:", e.message);
     return mapped;
   }
+}
+
+// Strava-Stub, zu dem es schon eine vollständige Aktivität mit gleicher Startzeit (±5 min) gibt —
+// z. B. nach einem FIT-Upload, bei dem intervals.icu den Stub nicht ersetzt hat → nicht doppelt anzeigen.
+function dropReplacedStubs(list) {
+  const full = list.filter((a) => !a.stub).map((a) => Date.parse(`${a.start}Z`)).filter((t) => !isNaN(t));
+  return list.filter((a) => {
+    if (!a.stub) return true;
+    const t = Date.parse(`${a.start}Z`);
+    return isNaN(t) || !full.some((f) => Math.abs(f - t) <= 5 * 60 * 1000);
+  });
 }
 
 const stravaIdOf = (r) => r && (r.strava_id ?? r.external_id ?? null);

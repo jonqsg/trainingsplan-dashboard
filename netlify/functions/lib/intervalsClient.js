@@ -18,11 +18,13 @@ function athleteId() {
 }
 
 async function intervalsFetch(path, options = {}) {
+  // Bei FormData (Datei-Upload) setzt fetch den multipart-Content-Type samt Boundary selbst
+  const isForm = typeof FormData !== "undefined" && options.body instanceof FormData;
   const res = await fetch(`${BASE}${path}`, {
     ...options,
     headers: {
       Authorization: authHeader(),
-      "Content-Type": "application/json",
+      ...(isForm ? {} : { "Content-Type": "application/json" }),
       ...(options.headers || {}),
     },
   });

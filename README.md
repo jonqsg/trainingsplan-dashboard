@@ -163,6 +163,11 @@ intervals.icu ersetzt dabei normalerweise den leeren Strava-Eintrag.
 - **iPhone (OnelapFit/Magene):** Ich → Aktivitäten → Fahrt öffnen → Teilen → „Share Fit“ →
   „In Dateien sichern“. Dann im Dashboard die Fahrt antippen → „FIT-Datei hochladen“ (verknüpft sie mit
   dem geplanten Workout) oder im Reiter Aktivitäten → „Auswählen“.
+- **Direkt aus dem Teilen-Menü (iPhone-Kurzbefehl):** iOS lässt Web-Apps nicht ins Teilen-Menü. Ein
+  Kurzbefehl übernimmt das: Er schickt die geteilte Datei als rohen POST-Body an
+  `/.netlify/functions/intervals-upload` und zeigt die Antwort als Benachrichtigung. Einrichtung Schritt
+  für Schritt im Dashboard unter Einstellungen → Integrationen → „Anleitung anzeigen“. Ein leerer
+  Strava-Eintrag mit gleicher Startzeit (±5 min) wird dabei automatisch entfernt.
 - Die Datei wird vor dem Upload im Browser gzip-komprimiert (max. ca. 4 MB).
 - Bleibt der Strava-Eintrag in intervals.icu trotzdem bestehen, bietet das Dashboard an, ihn zu
   entfernen — sonst zählt die Trainingslast doppelt. Entfernt werden nur Strava-Einträge ohne Daten.

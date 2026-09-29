@@ -338,6 +338,9 @@
   .mini { background:var(--surface-2); border-radius:14px; padding:10px 12px; }
   .mini .k { font-size:12px; color:var(--sub); font-weight:600; }
   .mini .v { font-size:18px; font-weight:750; margin-top:2px; }
+  .guide ol { margin:4px 0 0; padding-left:20px; font-size:14px; line-height:1.5; }
+  .guide li { margin-top:8px; }
+  .guide .input { font-size:13px; }
   .upload-card { display:flex; gap:12px; align-items:center; padding:14px 16px; margin-bottom:14px; }
   .upload-card > div { flex:1; }
   @media (max-width:520px) { .upload-card { flex-wrap:wrap; } .upload-card .btn { width:100%; } }
@@ -2066,6 +2069,9 @@ function renderSettingsModal(m){
       ${!m.strava ? `<span class="muted" style="font-size:13px">…</span>` : m.strava.connected
         ? `<button class="btn xs secondary" onclick="disconnectStrava()">Trennen</button>`
         : `<a class="btn xs ${m.strava.configured ? "" : "secondary"}" href="${API}/strava-auth" ${m.strava.configured ? "" : `onclick="return false" aria-disabled="true" style="opacity:.5"`}>Verbinden</a>`}</div>
+    <div class="set-row"><div class="t">iPhone: Fahrten direkt aus OnelapFit teilen<small>iOS erlaubt Web-Apps nicht im Teilen-Menü — ein Kurzbefehl übernimmt das und lädt die FIT-Datei zu intervals.icu hoch.</small>
+      <button class="btn xs secondary" style="margin-top:8px" onclick="state.modal.showShortcut=!state.modal.showShortcut; renderModal()">${state.modal && state.modal.showShortcut ? "Anleitung ausblenden" : "Anleitung anzeigen"}</button></div></div>
+    ${m.showShortcut ? shortcutGuide() : ""}
     <div class="set-row"><div class="t">Automatisch an intervals.icu senden<small>Neue und verschobene Workouts landen als strukturiertes Workout im Kalender — und von dort auf Garmin, Wahoo oder Zwift.</small></div>
       ${sw(s.autoPush, "toggleSetting('autoPush', this.checked)")}</div>
     <div class="set-row"><div class="t">Tägliche Erinnerung<small>Push-Nachricht um ca. 7 Uhr mit den Einheiten des Tages. Auf dem iPhone: App zum Home-Bildschirm hinzufügen und von dort öffnen.</small>
@@ -2078,6 +2084,25 @@ function renderSettingsModal(m){
       <label class="btn secondary sm file-btn">${icon("upload",16)}Importieren<input type="file" accept=".json,application/json" onchange="importData(event)"></label>
     </div>
     <div class="sheet-foot"><button class="btn block" onclick="saveSettings()">Speichern</button></div>`;
+}
+const UPLOAD_URL = () => `${location.origin}${API}/intervals-upload`;
+function shortcutGuide(){
+  return `<div class="panel guide">
+    <div class="panel-title">Kurzbefehl „An Trainings-Dashboard“ <span>einmalig, ca. 2 min</span></div>
+    <ol>
+      <li>App <b>Kurzbefehle</b> öffnen → <b>+</b> → oben den Namen auf <b>An Trainings-Dashboard</b> setzen.</li>
+      <li>Unten auf <b>ⓘ</b> (Details) → <b>Im Share-Sheet anzeigen</b> einschalten. Oben bei „Empfängt“ nur <b>Dateien</b> auswählen.</li>
+      <li>Aktion <b>Inhalt von URL abrufen</b> hinzufügen. Als URL diese Adresse einfügen:
+        <div class="inline-row" style="margin:8px 0"><input class="input" readonly value="${esc(UPLOAD_URL())}" onclick="this.select()"><button class="btn secondary sm" onclick="copyUploadUrl()">${icon("copy",15)}Kopieren</button></div>
+        Auf den Pfeil <b>›</b> tippen: Methode <b>POST</b>, Anfragetext <b>Datei</b>, Datei = <b>Kurzbefehleingabe</b>.</li>
+      <li>Aktion <b>Benachrichtigung anzeigen</b> hinzufügen und als Text <b>Inhalt von URL</b> wählen.</li>
+    </ol>
+    <p class="muted" style="font-size:13px; margin-top:8px">Nutzen: In OnelapFit Fahrt öffnen → Teilen → „Share Fit“ → <b>An Trainings-Dashboard</b>. Die Fahrt landet vollständig in intervals.icu, ein leerer Strava-Eintrag mit gleicher Startzeit wird automatisch ersetzt. Danach im Dashboard synchronisieren.</p>
+  </div>`;
+}
+function copyUploadUrl(){
+  const u = UPLOAD_URL();
+  (navigator.clipboard ? navigator.clipboard.writeText(u) : Promise.reject()).then(()=>toast("Adresse kopiert")).catch(()=>toast("Bitte Adresse im Feld markieren und kopieren"));
 }
 async function disconnectStrava(){
   if(!confirm("Verbindung zu Strava trennen?")) return;
@@ -2494,7 +2519,7 @@ function renderDetailModal(m){
       : `<button class="btn block ${w.done?"secondary":"good"}" onclick="toggleDone(${w.id}, '${m.dateKey}')">${icon(w.done?"x":"check",18,2.4)}${w.done?"Als offen markieren":"Als erledigt markieren"}</button>`}</div>`;
 }
 /* ---------- FIT-Upload (z. B. "Share Fit" aus OnelapFit) ---------- */
-const FIT_HELP = "In OnelapFit: Ich → Aktivitäten → Fahrt öffnen → Teilen → „Share Fit“ → „In Dateien sichern“. Dann hier die Datei auswählen.";
+const FIT_HELP = "In OnelapFit: Ich → Aktivitäten → Fahrt öffnen → Teilen → „Share Fit“ → „In Dateien sichern“. Dann hier die Datei auswählen. Schneller: Kurzbefehl einrichten (Einstellungen → Integrationen).";
 const FIT_OK = /\.(fit|fit\.gz|gpx|gpx\.gz|tcx|tcx\.gz|zip)$/i;
 // Kein accept-Filter: iOS kennt keinen MIME-Typ für .fit und würde die Dateien sonst ausgrauen
 function pickFit(stubIdx=null){
